@@ -22,6 +22,7 @@ type Reader struct {
 	CommentPrefix        string
 	CommentPrefixEscaped string
 	TrimPrefix           string
+	StripUtf8BOM         bool
 
 	s    text.Scanner
 	errC chan error
@@ -58,6 +59,12 @@ func (r *Reader) ReadAll() (top *Elem, err error) {
 
 	for n := 1; r.s.Scan(); n++ {
 		line := r.s.Text()
+		if n == 1 && r.StripUtf8BOM {
+			if strings.HasPrefix(line, "\uFEFF") {
+				line = line[3:]
+			}
+		}
+
 		if nTrimPrefix != 0 {
 			if strings.HasPrefix(line, r.TrimPrefix) {
 				line = line[nTrimPrefix:]
