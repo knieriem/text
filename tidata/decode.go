@@ -3,11 +3,13 @@ package tidata
 import (
 	"errors"
 	"fmt"
-	"github.com/knieriem/text"
 	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/knieriem/text"
+	"github.com/knieriem/text/line"
 )
 
 // An UnmarshalTypeError describes a tidata value that was
@@ -43,28 +45,30 @@ type decoder struct {
 		field string
 		line  int
 	}
-	errList Errors
+	errList line.ErrorList
 }
 
 type Error struct {
 	Err  error
 	Key  string
-	Line int
+	line int
 }
-type Errors []Error
 
-func (list Errors) Error() string {
-	e := list[0]
-	return fmt.Sprintf("tidata: line %d: %s: %s", e.Line, e.Key, e.Err.Error())
+func (e *Error) Line() int {
+	return e.line
+}
+
+func (e *Error) Error() string {
+	return fmt.Sprintf("tidata: %s: %s", e.Key, e.Err.Error())
 }
 
 func (d *decoder) saveError(err error) {
-	e := Error{
+	e := &Error{
+		line: d.cur.line,
 		Err:  err,
-		Line: d.cur.line,
 		Key:  d.cur.field,
 	}
-	d.errList = append(d.errList, e)
+	d.errList.Add(e)
 }
 
 func (e Elem) Decode(i interface{}, c *Config) (err error) {
@@ -90,8 +94,8 @@ func (e Elem) Decode(i interface{}, c *Config) (err error) {
 	}
 	d.Config = c
 	d.decodeItem(v, e)
-	if d.errList != nil {
-		err = d.errList
+	if d.errList.List != nil {
+		err = &d.errList
 	}
 	return
 }
