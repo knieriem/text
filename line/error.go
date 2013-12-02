@@ -48,6 +48,10 @@ type message struct {
 	line int
 }
 
+func NewMsg(lineNum int, m string) *message {
+	return &message{msg: m, line: lineNum}
+}
+
 func (m *message) Error() string {
 	return m.msg
 }

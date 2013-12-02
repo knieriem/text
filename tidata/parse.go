@@ -12,9 +12,10 @@
 package tidata
 
 import (
-	"errors"
-	"github.com/knieriem/text"
 	"strings"
+
+	"github.com/knieriem/text"
+	"github.com/knieriem/text/line"
 )
 
 type Reader struct {
@@ -44,7 +45,14 @@ func (r *Reader) ReadAll() (top *Elem, err error) {
 	rsub := make(chan []Elem)
 	r.errC = make(chan error, 4)
 	go r.handleLevel(sub, rsub)
-	defer close(sub)
+	defer func() {
+		if err != nil {
+			l := new(line.ErrorList)
+			l.Add(err)
+			err = l
+		}
+		close(sub)
+	}()
 
 	nTrimPrefix := len(r.TrimPrefix)
 
@@ -106,7 +114,7 @@ func (r *Reader) handleLevel(inCh <-chan input, ret chan<- []Elem) {
 		if len(in.line) > 0 {
 			if in.line[0] == '\t' {
 				if el == nil {
-					r.errC <- errors.New("wrong depth")
+					r.errC <- line.NewMsg(in.lineNum, "wrong depth")
 				}
 				if len(list) > 0 {
 					// input is not for me, propagate it to sub handler
@@ -137,9 +145,9 @@ func (r *Reader) handleLevel(inCh <-chan input, ret chan<- []Elem) {
 		if n := len(s); n != 0 {
 			c0, cLast := in.line[0], in.line[n-1]
 			if c0 == ' ' {
-				r.errC <- errors.New("extra space character at start of line")
+				r.errC <- line.NewMsg(in.lineNum, "extra space character near start of line")
 			} else if cLast == ' ' || cLast == '\t' {
-				r.errC <- errors.New("extra white-space at the end of the line")
+				r.errC <- line.NewMsg(in.lineNum, "extra white-space at the end of the line")
 			}
 		}
 		list = append(list, Elem{Text: strings.TrimSpace(in.line), LineNum: in.lineNum})
