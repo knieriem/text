@@ -65,6 +65,10 @@ type lineError struct {
 	line int
 }
 
+func NewError(lineNum int, err error) *lineError {
+	return &lineError{error: err, line: lineNum}
+}
+
 func (e *lineError) Line() int {
 	return e.line
 }
