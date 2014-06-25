@@ -46,6 +46,22 @@ type decoder struct {
 		line  int
 	}
 	errList line.ErrorList
+
+	deferredWork []deferred
+}
+
+type Deferred interface {
+	DeferredWork(arg interface{}) error
+}
+
+type DeferredWorkRunner interface {
+	RunDeferredWork(func(arg interface{}) error) error
+}
+
+type deferred struct {
+	fn    func(interface{}) error
+	line  int
+	field string
 }
 
 type Error struct {
@@ -79,16 +95,20 @@ func (e Elem) Decode(i interface{}, c *Config) (err error) {
 	}
 	v = v.Elem()
 
+	d := new(decoder)
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(runtime.Error); ok {
 				panic(r)
 			}
-			err = r.(error)
+			err = &Error{
+				line: d.cur.line,
+				Err:  r.(error),
+				Key:  d.cur.field,
+			}
 		}
 	}()
 
-	d := new(decoder)
 	if c == nil {
 		c = &dfltConfig
 	}
@@ -232,6 +252,20 @@ func (d *decoder) decodeStruct(dest reflect.Value, src Elem) {
 		seenMap.Set(reflect.ValueOf(seen))
 	}
 
+	if r, ok := dest.Addr().Interface().(DeferredWorkRunner); ok {
+		for _, w := range d.deferredWork {
+			err = r.RunDeferredWork(w.fn)
+			if err != nil {
+				e := &Error{
+					line: w.line,
+					Err:  err,
+					Key:  w.field,
+				}
+				d.errList.Add(e)
+			}
+		}
+		d.deferredWork = nil
+	}
 	if p, ok := dest.Addr().Interface().(StructPostprocessor); ok {
 		d.cur.field = t.String()
 		d.cur.line = src.LineNum
@@ -275,6 +309,13 @@ type Unmarshaler interface {
 
 func (d *decoder) decodeItem(v reflect.Value, el Elem) {
 	d.cur.line = el.LineNum
+
+	field := d.cur.field
+	defer func() {
+		if p, ok := v.Addr().Interface().(Deferred); ok {
+			d.deferredWork = append(d.deferredWork, deferred{fn: p.DeferredWork, line: el.LineNum, field: field})
+		}
+	}()
 
 	if u, ok := v.Addr().Interface().(Unmarshaler); ok {
 		err := u.UnmarshalTidata(el)
@@ -354,7 +395,7 @@ func (d *decoder) decodeMap(v reflect.Value, src Elem) {
 	for i := 0; i < n; i++ {
 		el := src.Children[i]
 		kstr := el.Key()
-		if kstr == el.Text && len(el.Children) == 0 {
+		if kstr == el.Text && len(el.Children) == 0 && t.Elem().Kind() == reflect.Bool {
 			// only allowed for map[T]bool
 			d.decodeString(key, kstr)
 			val.SetBool(true)
@@ -370,6 +411,7 @@ func (d *decoder) decodeMap(v reflect.Value, src Elem) {
 				}
 
 			}
+			d.cur.field = kstr
 			d.decodeItem(key, Elem{LineNum: el.LineNum, Text: ".\t" + kstr})
 			d.decodeItem(val, el)
 		}
