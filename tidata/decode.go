@@ -128,7 +128,9 @@ type StructPreprocessor interface {
 	Preprocess(*Elem) error
 }
 
-var structPreprocessorType = reflect.TypeOf((*StructPreprocessor)(nil)).Elem()
+type StructPostprocessor interface {
+	Postprocess() error
+}
 
 func (d *decoder) decodeStruct(dest reflect.Value, src Elem) {
 	var key string
@@ -228,6 +230,15 @@ func (d *decoder) decodeStruct(dest reflect.Value, src Elem) {
 	}
 	if seenMap.IsValid() {
 		seenMap.Set(reflect.ValueOf(seen))
+	}
+
+	if p, ok := dest.Addr().Interface().(StructPostprocessor); ok {
+		d.cur.field = t.String()
+		d.cur.line = src.LineNum
+		err = p.Postprocess()
+		if err != nil {
+			d.saveError(err)
+		}
 	}
 	return
 }
