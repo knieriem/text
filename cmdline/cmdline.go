@@ -158,7 +158,7 @@ func (cl *CmdLine) Process() (err error) {
 			goto checkNMin
 		}
 		if nopt > 1 && cmd.Opt[nopt-1] == "..." {
-			nmin = narg + nopt - 2
+			nmin = narg
 			goto checkNMin
 		}
 		nmin = narg
