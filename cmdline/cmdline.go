@@ -13,6 +13,7 @@ import (
 )
 
 type Cmd struct {
+	Map       map[string]Cmd
 	Fn        func(arg []string) error
 	Arg       []string
 	Opt       []string
@@ -126,21 +127,40 @@ func (cl *CmdLine) Process() (err error) {
 		}
 		name := args[0]
 		if name == "help" {
-			cl.help(cl.Stdout)
+			cl.help(cl.Stdout, args[1:])
 			if cl.Forward != nil {
 				cl.fwd([]byte("help\n"))
 			}
 			continue
 		}
 
-		cmd, ok := cl.cmdMap[name]
+		m := cl.cmdMap
+		cmdName := name
+
+	retry:
+		cmd, ok := m[cmdName]
 		if !ok {
+			if iDot := strings.Index(cmdName, "."); iDot != -1 {
+				if cmd, ok = m[cmdName[:iDot]]; ok {
+					m = cmd.Map
+					if m != nil {
+						cmdName = cmdName[iDot+1:]
+						goto retry
+					}
+				}
+			}
 			if cl.Forward != nil {
 				cl.fwd([]byte(cl.Text() + "\n"))
 			} else {
 				cl.FnNotFound(name)
 			}
 			continue
+		}
+		if cmd.Map != nil {
+			if cmd, ok = cmd.Map[""]; !ok {
+				cl.FnNotFound(name)
+				continue
+			}
 		}
 		if cmd.InitFlags != nil {
 			f := flag.NewFlagSet("", flag.ExitOnError)
@@ -188,18 +208,60 @@ func (cl *CmdLine) fwd(line []byte) {
 
 }
 
-func (cl *CmdLine) help(w io.Writer) {
-	names := make([]string, 0, len(cl.cmdMap))
-	for name := range cl.cmdMap {
+func (cl *CmdLine) help(w io.Writer, args []string) {
+	hasWritten := false
+	cmdName := ""
+	iDot := -1
+	if len(args) > 0 {
+		cmdName = args[0]
+	}
+	pfx := ""
+	m := cl.cmdMap
+retry:
+	iDot = strings.Index(cmdName, ".")
+	names := make([]string, 0, len(m))
+	for name := range m {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 
 	for _, name := range names {
-		v := cl.cmdMap[name]
+		v := m[name]
+		if cmdName != "" {
+			if name == cmdName {
+				if v.Map != nil {
+					pfx += cmdName + "."
+					cmdName = ""
+					m = v.Map
+					goto retry
+				}
+				goto found
+			}
+			if iDot == -1 {
+				continue
+			}
+			if name != cmdName[:iDot] {
+				continue
+			}
+			if v.Map == nil {
+				continue
+			}
+			pfx += cmdName[:iDot+1]
+			cmdName = cmdName[iDot+1:]
+			m = v.Map
+			goto retry
+		}
+	found:
 		flags := v.Flags
 		if flags != "" {
 			flags = " " + flags
+		}
+		if pfx != "" {
+			if name == "" {
+				name = pfx[:len(pfx)-1]
+			} else {
+				name = pfx + name
+			}
 		}
 		fmt.Fprintln(w, "\t"+name+flags+argString(" ", v.Arg, "")+argString(" [", v.Opt, "]"))
 		if v.Help != "" {
@@ -208,6 +270,10 @@ func (cl *CmdLine) help(w io.Writer) {
 			}
 		}
 		fmt.Fprint(w, "\n")
+		hasWritten = true
+	}
+	if !hasWritten && len(args) > 0 {
+		cl.FnNotFound(args[0])
 	}
 	if cl.ExtraHelp != nil {
 		cl.ExtraHelp()
