@@ -87,7 +87,7 @@ func (cl *CmdLine) Process() (err error) {
 	//processLoop:
 	for {
 		if cl.Prompt != "" {
-			fmt.Fprintf(cl.ConsoleOut, "%s ", cl.Prompt)
+			fmt.Fprintf(cl.ConsoleOut, "%s", cl.Prompt)
 		}
 		if !cl.Scan() {
 			err = cl.Err()
@@ -106,8 +106,12 @@ func (cl *CmdLine) Process() (err error) {
 			break
 		}
 		line = cl.Text()
-		if cl.Prompt != "" && strings.HasPrefix(line, cl.Prompt) {
-			line = line[len(cl.Prompt):]
+		if cl.Prompt != "" {
+		again:
+			if strings.HasPrefix(line, cl.Prompt) {
+				line = line[len(cl.Prompt):]
+				goto again
+			}
 		}
 		args := text.Tokenize(line)
 		if len(args) == 0 {
@@ -115,12 +119,6 @@ func (cl *CmdLine) Process() (err error) {
 				cl.fwd([]byte{'\n'})
 			}
 			continue
-		}
-		if cl.Prompt != "" && args[0] == cl.Prompt {
-			args = args[1:]
-			if len(args) == 0 {
-				continue
-			}
 		}
 		if strings.HasPrefix(args[0], "#") {
 			continue
