@@ -18,6 +18,7 @@ type Cmd struct {
 	Arg       []string
 	Opt       []string
 	Help      string
+	Group     string
 	Flags     string
 	InitFlags func(f *flag.FlagSet)
 }
@@ -27,16 +28,17 @@ type CmdLine struct {
 	inputStack  []*cmdLineReader
 	savedPrompt string
 
-	cmdMap      map[string]Cmd
-	ExtraHelp   func()
-	Prompt      string
-	ConsoleOut  io.Writer
-	Stdout      io.Writer
-	Forward     io.Writer
-	Errf        func(format string, v ...interface{})
-	FnNotFound  func(string)
-	FnFailed    func(string, error)
-	FnWrongNArg func(string)
+	cmdMap       map[string]Cmd
+	ExtraHelp    func()
+	DefaultGroup string
+	Prompt       string
+	ConsoleOut   io.Writer
+	Stdout       io.Writer
+	Forward      io.Writer
+	Errf         func(format string, v ...interface{})
+	FnNotFound   func(string)
+	FnFailed     func(string, error)
+	FnWrongNArg  func(string)
 }
 
 type cmdLineReader struct {
@@ -207,6 +209,7 @@ func (cl *CmdLine) fwd(line []byte) {
 }
 
 func (cl *CmdLine) help(w io.Writer, args []string) {
+	outmap := make(map[string]map[string]Cmd, 8)
 	hasWritten := false
 	cmdName := ""
 	iDot := -1
@@ -217,14 +220,8 @@ func (cl *CmdLine) help(w io.Writer, args []string) {
 	m := cl.cmdMap
 retry:
 	iDot = strings.Index(cmdName, ".")
-	names := make([]string, 0, len(m))
-	for name := range m {
-		names = append(names, name)
-	}
-	sort.Strings(names)
 
-	for _, name := range names {
-		v := m[name]
+	for name, v := range m {
 		if cmdName != "" {
 			if name == cmdName {
 				if v.Map != nil {
@@ -250,10 +247,6 @@ retry:
 			goto retry
 		}
 	found:
-		flags := v.Flags
-		if flags != "" {
-			flags = " " + flags
-		}
 		if pfx != "" {
 			if name == "" {
 				name = pfx[:len(pfx)-1]
@@ -261,14 +254,60 @@ retry:
 				name = pfx + name
 			}
 		}
-		fmt.Fprintln(w, "\t"+name+flags+argString(" ", v.Arg, "")+argString(" [", v.Opt, "]"))
-		if v.Help != "" {
-			for _, s := range strings.Split(v.Help, "\n") {
-				fmt.Fprintln(w, "\t\t"+s)
+		group := v.Group
+		if group == "" {
+			if cl.DefaultGroup == "" {
+				group = "ZZZ__Other commands"
+			} else {
+				group = cl.DefaultGroup
 			}
 		}
-		fmt.Fprint(w, "\n")
-		hasWritten = true
+		gm, ok := outmap[group]
+		if !ok {
+			gm = make(map[string]Cmd, 8)
+			outmap[group] = gm
+		}
+		gm[name] = v
+	}
+
+	gNames := make([]string, 0, len(outmap))
+	for name := range outmap {
+		gNames = append(gNames, name)
+	}
+	sort.Strings(gNames)
+	for _, gmName := range gNames {
+		gm := outmap[gmName]
+		if i := strings.Index(gmName, "__"); i != -1 {
+			gmName = gmName[i+2:]
+		}
+		if len(gNames) != 1 {
+			fmt.Fprintln(w, "["+gmName+"]\n")
+		}
+
+		names := make([]string, 0, len(gm))
+		for name := range gm {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+
+		for _, name := range names {
+			v := gm[name]
+			flags := v.Flags
+			if flags != "" {
+				flags = " " + flags
+			}
+			fmt.Fprintln(w, "\t"+name+flags+argString(" ", v.Arg, "")+argString(" [", v.Opt, "]"))
+			if v.Help != "" {
+				for _, s := range strings.Split(v.Help, "\n") {
+					fmt.Fprintln(w, "\t\t"+s)
+				}
+			}
+			if v.Map != nil {
+				fmt.Fprintf(w, "\t\tSee `help %s' for details.\n", name)
+			}
+			fmt.Fprint(w, "\n")
+			hasWritten = true
+		}
 	}
 	if !hasWritten && len(args) > 0 {
 		cl.FnNotFound(args[0])
