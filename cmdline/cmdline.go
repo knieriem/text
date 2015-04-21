@@ -18,6 +18,7 @@ type Cmd struct {
 	Arg       []string
 	Opt       []string
 	Help      string
+	Hidden    bool
 	Group     string
 	Flags     string
 	InitFlags func(f *flag.FlagSet)
@@ -292,6 +293,9 @@ retry:
 
 		for _, name := range names {
 			v := gm[name]
+			if v.Hidden && len(args) == 0 {
+				continue
+			}
 			flags := v.Flags
 			if flags != "" {
 				flags = " " + flags
