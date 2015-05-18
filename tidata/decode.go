@@ -148,7 +148,7 @@ type StructPreprocessor interface {
 	Preprocess(*Elem) error
 }
 
-type StructPostprocessor interface {
+type Postprocessor interface {
 	Postprocess() error
 }
 
@@ -241,6 +241,7 @@ func (d *decoder) decodeStruct(dest reflect.Value, src Elem) {
 				if v.Kind() == reflect.Slice {
 					d.collectItems(v, key, src.Children[i:])
 					seenCombined[key] = true
+					d.postProcess(v, el)
 					continue
 				}
 			}
@@ -266,15 +267,19 @@ func (d *decoder) decodeStruct(dest reflect.Value, src Elem) {
 		}
 		d.deferredWork = nil
 	}
-	if p, ok := dest.Addr().Interface().(StructPostprocessor); ok {
-		d.cur.field = t.String()
+	return
+}
+
+func (d *decoder) postProcess(v reflect.Value, src Elem) {
+	if p, ok := v.Addr().Interface().(Postprocessor); ok {
+		d.cur.field = src.Key()
 		d.cur.line = src.LineNum
-		err = p.Postprocess()
+		err := p.Postprocess()
 		if err != nil {
 			d.saveError(err)
 		}
-	}
-	return
+	} 
+
 }
 
 func (d *decoder) collectItems(v reflect.Value, keyWant string, tail []Elem) {
@@ -377,6 +382,7 @@ retry:
 		}
 		d.decodeString(v, val)
 	}
+	d.postProcess(v, el)
 }
 func (d *decoder) decodeMap(v reflect.Value, src Elem) {
 	t := v.Type()
