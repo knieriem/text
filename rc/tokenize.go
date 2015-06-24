@@ -1,4 +1,4 @@
-package text
+package rc
 
 import (
 	"strings"

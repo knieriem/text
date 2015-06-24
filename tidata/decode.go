@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/knieriem/text"
 	"github.com/knieriem/text/line"
+	"github.com/knieriem/text/rc"
 )
 
 // An UnmarshalTypeError describes a tidata value that was
@@ -181,7 +181,7 @@ func (d *decoder) decodeStruct(dest reflect.Value, src Elem) {
 		/* look into Value() if it contains short versions of fields */
 		v := src.Value()
 		var pfx []Elem
-		for _, x := range text.Tokenize(v) {
+		for _, x := range rc.Tokenize(v) {
 			eq := strings.Index(x, "=")
 			el := Elem{LineNum: d.cur.line}
 			if eq != -1 {
@@ -278,7 +278,7 @@ func (d *decoder) postProcess(v reflect.Value, src Elem) {
 		if err != nil {
 			d.saveError(err)
 		}
-	} 
+	}
 
 }
 
@@ -359,7 +359,7 @@ retry:
 				}
 			}
 		} else if s := el.Value(); s != "" {
-			list := text.Tokenize(s)
+			list := rc.Tokenize(s)
 			if n = len(list); n > 0 {
 				sl = reflect.MakeSlice(v.Type(), n, n)
 				for i := range list {

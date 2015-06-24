@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/knieriem/text"
+	"github.com/knieriem/text/rc"
 )
 
 const (
@@ -151,7 +152,7 @@ func (cl *CmdLine) Process() (err error) {
 				goto again
 			}
 		}
-		args := text.Tokenize(line)
+		args := rc.Tokenize(line)
 		if len(args) == 0 {
 			if cl.Forward != nil {
 				cl.fwd([]byte{'\n'})
