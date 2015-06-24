@@ -18,7 +18,6 @@ import (
 
 const (
 	defaultGroup = "ZZY__Other commands"
-	builtinGroup = "ZZZ__Builtin commands"
 )
 
 type Cmd struct {
@@ -70,8 +69,7 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 	cl.cmdMap = m
 	builtinCmdMap := map[string]Cmd{
 		".": {
-			Group: builtinGroup,
-			Arg:   []string{"FILE"},
+			Arg: []string{"FILE"},
 			Fn: func(arg []string) (err error) {
 				f, err := os.Open(arg[1])
 				if err == nil {
@@ -82,8 +80,7 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 			Help: "Read commands from FILE.",
 		},
 		"fn": {
-			Group: builtinGroup,
-			Arg:   []string{"NAME", "{"},
+			Arg: []string{"NAME", "{"},
 			Fn: func(arg []string) error {
 				return cl.parseFunc(arg[1:])
 			},
@@ -91,9 +88,8 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 				"be closed with a `}' on a single line.",
 		},
 		"repeat": {
-			Group: builtinGroup,
-			Arg:   []string{"N", "CMD"},
-			Opt:   []string{"ARG", "..."},
+			Arg: []string{"N", "CMD"},
+			Opt: []string{"ARG", "..."},
 			Fn: func(arg []string) error {
 				return cl.repeatCmd(arg[1:])
 			},
@@ -109,7 +105,6 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 	for name, cmd := range builtinCmdMap {
 		if _, ok := m[name]; !ok {
 			cmd.Hidden = true
-			cmd.Group = ""
 			m[name] = cmd
 		}
 	}
