@@ -2,14 +2,21 @@ package cmdline
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"sort"
 	"strings"
 
 	"github.com/knieriem/text"
+)
+
+const (
+	defaultGroup = "ZZY__Other commands"
+	builtinGroup = "ZZZ__Builtin commands"
 )
 
 type Cmd struct {
@@ -26,10 +33,12 @@ type Cmd struct {
 
 type CmdLine struct {
 	*cmdLineReader
-	inputStack  []*cmdLineReader
+	cur         stackEntry
+	inputStack  []stackEntry
 	savedPrompt string
 
 	cmdMap       map[string]Cmd
+	funcMap      map[string]string
 	ExtraHelp    func()
 	DefaultGroup string
 	Prompt       string
@@ -54,21 +63,30 @@ func newCmdLineReader(s text.Scanner, c io.Closer) *cmdLineReader {
 func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 	cl = new(CmdLine)
 	cl.cmdLineReader = newCmdLineReader(s, nil)
+	cl.cur.lineReader = cl.cmdLineReader
+	cl.funcMap = make(map[string]string)
 	cl.cmdMap = m
 	if _, ok := m["."]; !ok {
 		m["."] = Cmd{
-			Arg: []string{"FILE"},
+			Group: builtinGroup,
+			Arg:   []string{"FILE"},
 			Fn: func(arg []string) (err error) {
 				f, err := os.Open(arg[1])
 				if err == nil {
-					cl.inputStack = append(cl.inputStack, cl.cmdLineReader)
-					cl.cmdLineReader = newCmdLineReader(bufio.NewScanner(f), f)
-					cl.savedPrompt = cl.Prompt
-					cl.Prompt = ""
+					cl.pushStack(f)
 				}
 				return
 			},
-			Help: "read commands from FILE",
+			Help: "Read commands from FILE.",
+		}
+		m["fn"] = Cmd{
+			Group: builtinGroup,
+			Arg:   []string{"NAME", "{"},
+			Fn: func(arg []string) error {
+				return cl.parseFunc(arg[1:])
+			},
+			Help: "Define a function. The function body must\n" +
+				"be closed with a `}' on a single line.",
 		}
 	}
 	cl.Errf = func(string, ...interface{}) {}
@@ -82,6 +100,22 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 		cl.Errf("%s: wrong number of arguments\n", cmd)
 	}
 	return cl
+}
+
+type stackEntry struct {
+	lineReader *cmdLineReader
+}
+
+func (cl *CmdLine) pushStack(rc io.ReadCloser) {
+	cl.inputStack = append(cl.inputStack, cl.cur)
+	cl.cur = stackEntry{
+		lineReader: newCmdLineReader(bufio.NewScanner(rc), rc),
+	}
+	cl.cmdLineReader = cl.cur.lineReader
+	if cl.Prompt != "" {
+		cl.savedPrompt = cl.Prompt
+		cl.Prompt = ""
+	}
 }
 
 func (cl *CmdLine) Process() (err error) {
@@ -98,7 +132,8 @@ func (cl *CmdLine) Process() (err error) {
 				if sz := len(cl.inputStack); sz != 0 {
 					sz--
 					cl.cmdLineReader.Close()
-					cl.cmdLineReader = cl.inputStack[sz]
+					cl.cur = cl.inputStack[sz]
+					cl.cmdLineReader = cl.cur.lineReader
 					cl.inputStack = cl.inputStack[:sz]
 					if sz == 0 {
 						cl.Prompt = cl.savedPrompt
@@ -127,6 +162,10 @@ func (cl *CmdLine) Process() (err error) {
 			continue
 		}
 		name := args[0]
+		if body, ok := cl.funcMap[name]; ok {
+			cl.pushStack(ioutil.NopCloser(strings.NewReader(body)))
+			continue
+		}
 		if name == "help" {
 			cl.help(cl.Stdout, args[1:])
 			if cl.Forward != nil {
@@ -204,9 +243,41 @@ func (cl *CmdLine) Process() (err error) {
 func (cl *CmdLine) fwd(line []byte) {
 	_, err := cl.Forward.Write(line)
 	if err != nil {
-		cl.Errf("forwarding write failed: %v", err)
+		cl.Errf("forwarding write failed: %v\n", err)
 	}
 
+}
+
+func (cl *CmdLine) scanBlock() (block string, err error) {
+	for {
+		if !cl.Scan() {
+			err = cl.Err()
+			if err == nil {
+				err = errors.New("unexpected EOF")
+			}
+			return
+		}
+		s := strings.TrimSpace(cl.Text())
+		if s == "}" {
+			break
+		}
+		block += s + "\n"
+	}
+	return
+}
+
+func (cl *CmdLine) parseFunc(args []string) (err error) {
+	if args[1] != "{" {
+		err = errors.New("expected: fn NAME {")
+		return
+	}
+	body, err := cl.scanBlock()
+	if err != nil {
+		err = errors.New("error while parsing function body: " + err.Error())
+		return
+	}
+	cl.funcMap[args[0]] = body
+	return
 }
 
 func (cl *CmdLine) help(w io.Writer, args []string) {
@@ -258,7 +329,7 @@ retry:
 		group := v.Group
 		if group == "" {
 			if cl.DefaultGroup == "" {
-				group = "ZZZ__Other commands"
+				group = defaultGroup
 			} else {
 				group = cl.DefaultGroup
 			}
