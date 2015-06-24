@@ -68,8 +68,8 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 	cl.cur.lineReader = cl.cmdLineReader
 	cl.funcMap = make(map[string]string)
 	cl.cmdMap = m
-	if _, ok := m["."]; !ok {
-		m["."] = Cmd{
+	builtinCmdMap := map[string]Cmd{
+		".": {
 			Group: builtinGroup,
 			Arg:   []string{"FILE"},
 			Fn: func(arg []string) (err error) {
@@ -80,8 +80,8 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 				return
 			},
 			Help: "Read commands from FILE.",
-		}
-		m["fn"] = Cmd{
+		},
+		"fn": {
 			Group: builtinGroup,
 			Arg:   []string{"NAME", "{"},
 			Fn: func(arg []string) error {
@@ -89,8 +89,8 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 			},
 			Help: "Define a function. The function body must\n" +
 				"be closed with a `}' on a single line.",
-		}
-		m["repeat"] = Cmd{
+		},
+		"repeat": {
 			Group: builtinGroup,
 			Arg:   []string{"N", "CMD"},
 			Opt:   []string{"ARG", "..."},
@@ -98,8 +98,22 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 				return cl.repeatCmd(arg[1:])
 			},
 			Help: "Repeat a command N times.",
+		},
+	}
+	if _, ok := m["builtin"]; !ok {
+		m["builtin"] = Cmd{
+			Map:  builtinCmdMap,
+			Help: "Built-in commands.\nMay be called without the `builtin.' prefix.",
 		}
 	}
+	for name, cmd := range builtinCmdMap {
+		if _, ok := m[name]; !ok {
+			cmd.Hidden = true
+			cmd.Group = ""
+			m[name] = cmd
+		}
+	}
+
 	cl.Errf = func(string, ...interface{}) {}
 	cl.FnNotFound = func(cmd string) {
 		cl.Errf("%s: no such command\n", cmd)
