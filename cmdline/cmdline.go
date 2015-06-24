@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/knieriem/text"
@@ -74,7 +75,7 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 			Fn: func(arg []string) (err error) {
 				f, err := os.Open(arg[1])
 				if err == nil {
-					cl.pushStack(f)
+					cl.pushStack(f, 0, nil)
 				}
 				return
 			},
@@ -88,6 +89,15 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 			},
 			Help: "Define a function. The function body must\n" +
 				"be closed with a `}' on a single line.",
+		}
+		m["repeat"] = Cmd{
+			Group: builtinGroup,
+			Arg:   []string{"N", "CMD"},
+			Opt:   []string{"ARG", "..."},
+			Fn: func(arg []string) error {
+				return cl.repeatCmd(arg[1:])
+			},
+			Help: "Repeat a command N times.",
 		}
 	}
 	cl.Errf = func(string, ...interface{}) {}
@@ -105,12 +115,16 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 
 type stackEntry struct {
 	lineReader *cmdLineReader
+	nRepeat    int
+	rewind     func() io.ReadCloser
 }
 
-func (cl *CmdLine) pushStack(rc io.ReadCloser) {
+func (cl *CmdLine) pushStack(rc io.ReadCloser, nRepeat int, rewind func() io.ReadCloser) {
 	cl.inputStack = append(cl.inputStack, cl.cur)
 	cl.cur = stackEntry{
 		lineReader: newCmdLineReader(bufio.NewScanner(rc), rc),
+		nRepeat:    nRepeat,
+		rewind:     rewind,
 	}
 	cl.cmdLineReader = cl.cur.lineReader
 	if cl.Prompt != "" {
@@ -131,6 +145,13 @@ func (cl *CmdLine) Process() (err error) {
 			err = cl.Err()
 			if err == nil {
 				if sz := len(cl.inputStack); sz != 0 {
+					if cl.cur.nRepeat > 1 {
+						cl.cur.nRepeat--
+						rc := cl.cur.rewind()
+						cl.cur.lineReader = newCmdLineReader(bufio.NewScanner(rc), rc)
+						cl.cmdLineReader = cl.cur.lineReader
+						continue
+					}
 					sz--
 					cl.cmdLineReader.Close()
 					cl.cur = cl.inputStack[sz]
@@ -164,7 +185,7 @@ func (cl *CmdLine) Process() (err error) {
 		}
 		name := args[0]
 		if body, ok := cl.funcMap[name]; ok {
-			cl.pushStack(ioutil.NopCloser(strings.NewReader(body)))
+			cl.pushStack(ioutil.NopCloser(strings.NewReader(body)), 0, nil)
 			continue
 		}
 		if name == "help" {
@@ -279,6 +300,23 @@ func (cl *CmdLine) parseFunc(args []string) (err error) {
 	}
 	cl.funcMap[args[0]] = body
 	return
+}
+
+func (cl *CmdLine) repeatCmd(arg []string) (err error) {
+	i, err := strconv.ParseUint(arg[0], 10, 0)
+	if err != nil {
+		return
+	}
+	if i == 0 {
+		return
+	}
+	cmd := rc.Join(arg[1:])
+	rewind := func() io.ReadCloser {
+		return ioutil.NopCloser(strings.NewReader(cmd))
+	}
+	cl.pushStack(rewind(), int(i), rewind)
+	return
+
 }
 
 func (cl *CmdLine) help(w io.Writer, args []string) {
