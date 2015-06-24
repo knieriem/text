@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/knieriem/text"
 	"github.com/knieriem/text/rc"
@@ -94,6 +95,17 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 				return cl.repeatCmd(arg[1:])
 			},
 			Help: "Repeat a command N times.",
+		},
+		"sleep": {
+			Fn: func(arg []string) (err error) {
+				t, err := time.ParseDuration(arg[1])
+				if err == nil {
+					time.Sleep(t)
+				}
+				return
+			},
+			Arg:  []string{"DURATION"},
+			Help: "Sleep for the specified duration.",
 		},
 	}
 	if _, ok := m["builtin"]; !ok {
