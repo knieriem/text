@@ -88,6 +88,18 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 			Help: "Define a function. The function body must\n" +
 				"be closed with a `}' on a single line.",
 		},
+		"unbind": {
+			Arg: []string{"NAME"},
+			Fn: func(arg []string) (err error) {
+				if _, ok := cl.funcMap[arg[1]]; !ok {
+					err = errors.New("function not found")
+					return
+				}
+				delete(cl.funcMap, arg[1])
+				return
+			},
+			Help: "Unbind a function.",
+		},
 		"repeat": {
 			Arg: []string{"N", "CMD"},
 			Opt: []string{"ARG", "..."},
