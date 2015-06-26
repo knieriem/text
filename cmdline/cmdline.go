@@ -81,12 +81,26 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 			Help: "Read commands from FILE.",
 		},
 		"fn": {
-			Arg: []string{"NAME", "{"},
+			Opt: []string{"NAME", "CMD", "..."},
 			Fn: func(arg []string) error {
-				return cl.parseFunc(arg[1:])
+				switch len(arg) {
+				case 1:
+					for name := range cl.funcMap {
+						cl.dumpFunc(name)
+					}
+					return nil
+				case 2:
+					cl.dumpFunc(arg[1])
+					return nil
+				}
+				return cl.parseFunc(arg[1], arg[2:])
 			},
-			Help: "Define a function. The function body must\n" +
-				"be closed with a `}' on a single line.",
+			Help: `Define a function, or display its definition. CMD can be
+a single command, or a block enclosed in '{' and '}':
+	fn a {
+		cmdb
+		cmdc
+	}`,
 		},
 		"unbind": {
 			Arg: []string{"NAME"},
@@ -316,22 +330,40 @@ func (cl *CmdLine) scanBlock() (block string, err error) {
 		if s == "}" {
 			break
 		}
-		block += s + "\n"
+		block += "\t" + s + "\n"
 	}
 	return
 }
 
-func (cl *CmdLine) parseFunc(args []string) (err error) {
-	if args[1] != "{" {
-		err = errors.New("expected: fn NAME {")
+func (cl *CmdLine) dumpFunc(name string) {
+	body, ok := cl.funcMap[name]
+	if !ok {
 		return
 	}
-	body, err := cl.scanBlock()
+	fmt.Fprintln(os.Stdout, "fn", name, "{")
+	fmt.Fprint(os.Stdout, body)
+	fmt.Fprintln(os.Stdout, "}")
+	return
+}
+
+func (cl *CmdLine) parseFunc(name string, args []string) (err error) {
+	cmd, err := cl.parseCmd(args)
+	if err != nil {
+		return
+	}
+	cl.funcMap[name] = cmd
+	return
+}
+
+func (cl *CmdLine) parseCmd(f []string) (cmd string, err error) {
+	if f[0] != "{" {
+		cmd = "\t" + rc.Join(f) + "\n"
+		return
+	}
+	cmd, err = cl.scanBlock()
 	if err != nil {
 		err = errors.New("error while parsing function body: " + err.Error())
-		return
 	}
-	cl.funcMap[args[0]] = body
 	return
 }
 
@@ -343,7 +375,10 @@ func (cl *CmdLine) repeatCmd(arg []string) (err error) {
 	if i == 0 {
 		return
 	}
-	cmd := rc.Join(arg[1:])
+	cmd, err := cl.parseCmd(arg[1:])
+	if err != nil {
+		return
+	}
 	rewind := func() io.ReadCloser {
 		return ioutil.NopCloser(strings.NewReader(cmd))
 	}
