@@ -180,6 +180,18 @@ func (cl *CmdLine) pushStack(rc io.ReadCloser, nRepeat int, rewind func() io.Rea
 	}
 }
 
+func (cl *CmdLine) popStack() {
+	sz := len(cl.inputStack)
+	sz--
+	cl.cmdLineReader.Close()
+	cl.cur = cl.inputStack[sz]
+	cl.cmdLineReader = cl.cur.lineReader
+	cl.inputStack = cl.inputStack[:sz]
+	if sz == 0 {
+		cl.Prompt = cl.savedPrompt
+	}
+}
+
 func (cl *CmdLine) Process() (err error) {
 	var line string
 
@@ -199,14 +211,7 @@ func (cl *CmdLine) Process() (err error) {
 						cl.cmdLineReader = cl.cur.lineReader
 						continue
 					}
-					sz--
-					cl.cmdLineReader.Close()
-					cl.cur = cl.inputStack[sz]
-					cl.cmdLineReader = cl.cur.lineReader
-					cl.inputStack = cl.inputStack[:sz]
-					if sz == 0 {
-						cl.Prompt = cl.savedPrompt
-					}
+					cl.popStack()
 					continue
 				}
 			}
