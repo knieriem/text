@@ -51,6 +51,8 @@ type CmdLine struct {
 	FnNotFound   func(string)
 	FnFailed     func(string, error)
 	FnWrongNArg  func(string)
+
+	cIntr chan int
 }
 
 type cmdLineReader struct {
@@ -124,9 +126,16 @@ a single command, or a block enclosed in '{' and '}':
 		},
 		"sleep": {
 			Fn: func(arg []string) (err error) {
-				t, err := time.ParseDuration(arg[1])
-				if err == nil {
-					time.Sleep(t)
+				tArg, err := time.ParseDuration(arg[1])
+				if err != nil {
+					return
+				}
+				t := time.NewTimer(tArg)
+				select {
+				case <-t.C:
+				case <-cl.cIntr:
+					t.Stop()
+					err = ErrInterrupt
 				}
 				return
 			},
@@ -157,7 +166,19 @@ a single command, or a block enclosed in '{' and '}':
 	cl.FnWrongNArg = func(cmd string) {
 		cl.Errf("%s: wrong number of arguments\n", cmd)
 	}
+	cl.cIntr = make(chan int, 0)
 	return cl
+}
+
+func (cl *CmdLine) Interrupt(timeout time.Duration) (ok bool) {
+	t := time.NewTimer(timeout)
+	select {
+	case <-t.C:
+	case cl.cIntr <- 1:
+		t.Stop()
+		ok = true
+	}
+	return
 }
 
 type stackEntry struct {
@@ -192,15 +213,45 @@ func (cl *CmdLine) popStack() {
 	}
 }
 
+func (cl *CmdLine) popStackAll() {
+	for len(cl.inputStack) > 0 {
+		cl.popStack()
+	}
+}
+
+var ErrInterrupt = errors.New("interrupted")
+
 func (cl *CmdLine) Process() (err error) {
 	var line string
+
+	ready := make(chan bool)
 
 	//processLoop:
 	for {
 		if cl.Prompt != "" {
 			fmt.Fprintf(cl.ConsoleOut, "%s", cl.Prompt)
 		}
-		if !cl.Scan() {
+		go func() {
+			ready <- cl.Scan()
+		}()
+		scanOk := false
+	selAgain:
+		select {
+		case scanOk = <-ready:
+		case <-cl.cIntr:
+			if len(cl.inputStack) == 0 {
+				err = ErrInterrupt
+				return
+			} else {
+				cl.Errf("%v\n", ErrInterrupt)
+				cl.popStackAll()
+				if cl.Prompt != "" {
+					fmt.Fprintf(cl.ConsoleOut, "%s", cl.Prompt)
+				}
+				goto selAgain
+			}
+		}
+		if !scanOk {
 			err = cl.Err()
 			if err == nil {
 				if sz := len(cl.inputStack); sz != 0 {
@@ -309,6 +360,9 @@ func (cl *CmdLine) Process() (err error) {
 		err = cmd.Fn(args) // run it
 		if err != nil {
 			cl.FnFailed(name, err)
+			if err == ErrInterrupt {
+				cl.popStackAll()
+			}
 		}
 	}
 	return
