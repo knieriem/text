@@ -8,11 +8,15 @@ import (
 	"github.com/knieriem/text/tidata"
 )
 
+var MultiStringSep string
+
 func Parse(r io.Reader, conf interface{}) (err error) {
 	el, err := readTiData(r)
 	if err != nil {
 		return
 	}
+
+	ticonf.MultiStringSep = MultiStringSep
 	err = el.Decode(conf, &ticonf)
 	if err != nil {
 		return

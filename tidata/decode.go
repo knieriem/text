@@ -27,6 +27,7 @@ type Config struct {
 	Sep            string // a string separating key and value, e.g. ":"
 	MapSym         string
 	KeyToFieldName func(string) string
+	MultiStringSep string
 }
 
 var dfltConfig = Config{
@@ -36,6 +37,7 @@ var dfltConfig = Config{
 		field = strings.Replace(key, "-", "", -1)
 		return
 	},
+	MultiStringSep: "\n",
 }
 
 type decoder struct {
@@ -375,7 +377,7 @@ retry:
 		if val == "" {
 			for i := range el.Children {
 				if i > 0 {
-					val += "\n"
+					val += d.MultiStringSep
 				}
 				val += el.Children[i].Text
 			}
