@@ -97,3 +97,11 @@ func line(err error) (l int) {
 	}
 	return
 }
+
+func ErrInsertFilename(err error, name string) error {
+	if e, ok := err.(*ErrorList); ok {
+		e.Filename = name
+		return e
+	}
+	return &ErrorList{Filename: name, List: []error{err}}
+}
