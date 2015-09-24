@@ -432,7 +432,7 @@ func (d *decoder) decodeMap(v reflect.Value, src Elem) {
 func (d *decoder) decodeString(v reflect.Value, s string) {
 	switch v.Kind() {
 	default:
-		errors.New("data type not supported: " + v.Type().String())
+		d.saveError(errors.New("data type not supported: " + v.Type().String()))
 
 	case reflect.String:
 		v.SetString(s)

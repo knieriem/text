@@ -4,8 +4,8 @@ import (
 	"unicode/utf8"
 )
 
-// Heuristic: b is text if it is valid UTF-8 and doesn't
-// contain any unprintable ASCII or Unicode characters.
+// IsText returns true if bytes in b form valid UTF-8 characters, and
+// if b doesn't contain any unprintable ASCII or Unicode characters.
 func IsText(b []byte, extraChars []rune) bool {
 	for len(b) > 0 && utf8.FullRune(b) {
 		r, size := utf8.DecodeRune(b)
