@@ -1,7 +1,6 @@
 package tidata
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 )
