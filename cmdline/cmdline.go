@@ -31,6 +31,7 @@ type Cmd struct {
 	Group     string
 	Flags     string
 	InitFlags func(f *flag.FlagSet)
+	ignoreEnv bool
 }
 
 type CmdLine struct {
@@ -38,6 +39,8 @@ type CmdLine struct {
 	cur         stackEntry
 	inputStack  []stackEntry
 	savedPrompt string
+	tok         *rc.Tokenizer
+	envStack    rc.EnvStack
 
 	cmdMap       map[string]Cmd
 	funcMap      map[string]string
@@ -80,7 +83,8 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 				}
 				return
 			},
-			Help: "Read commands from FILE.",
+			Help:      "Read commands from FILE.",
+			ignoreEnv: true,
 		},
 		"fn": {
 			Opt: []string{"NAME", "CMD", "..."},
@@ -167,6 +171,9 @@ a single command, or a block enclosed in '{' and '}':
 		cl.Errf("%s: wrong number of arguments\n", cmd)
 	}
 	cl.cIntr = make(chan int, 0)
+	cl.tok = new(rc.Tokenizer)
+	cl.tok.Getenv = cl.envStack.Get
+	cl.envStack.Push(nil)
 	return cl
 }
 
@@ -185,6 +192,7 @@ type stackEntry struct {
 	lineReader *cmdLineReader
 	nRepeat    int
 	rewind     func() io.ReadCloser
+	popEnv     bool
 }
 
 func (cl *CmdLine) pushStack(rc io.ReadCloser, nRepeat int, rewind func() io.ReadCloser) {
@@ -202,6 +210,9 @@ func (cl *CmdLine) pushStack(rc io.ReadCloser, nRepeat int, rewind func() io.Rea
 }
 
 func (cl *CmdLine) popStack() {
+	if cl.cur.popEnv {
+		cl.envStack.Pop()
+	}
 	sz := len(cl.inputStack)
 	sz--
 	cl.cmdLineReader.Close()
@@ -276,19 +287,34 @@ func (cl *CmdLine) Process() (err error) {
 				goto again
 			}
 		}
-		args := rc.Tokenize(line)
+		c, err := cl.tok.ParseCmdLine(line)
+		if err != nil {
+			cl.Errf("%v", err)
+			continue
+		}
+		args := c.Fields
 		if len(args) == 0 {
+			if a := c.Assignments; len(a) != 0 {
+				cl.envStack.Insert(a)
+				continue
+			}
 			if cl.Forward != nil {
 				cl.fwd([]byte{'\n'})
 			}
 			continue
 		}
-		if strings.HasPrefix(args[0], "#") {
-			continue
+		privEnv := false
+		if len(c.Assignments) != 0 {
+			privEnv = true
 		}
+
 		name := args[0]
 		if body, ok := cl.funcMap[name]; ok {
+			if privEnv {
+				cl.envStack.Push(c.Assignments)
+			}
 			cl.pushStack(ioutil.NopCloser(strings.NewReader(body)), 0, nil)
+			cl.cur.popEnv = privEnv
 			continue
 		}
 		if name == "help" {
@@ -356,8 +382,15 @@ func (cl *CmdLine) Process() (err error) {
 			cl.FnWrongNArg(name)
 			continue
 		}
-
+		if privEnv {
+			if !cmd.ignoreEnv {
+				cl.envStack.Push(c.Assignments)
+			}
+		}
 		err = cmd.Fn(args) // run it
+		if privEnv {
+			cl.envStack.Pop()
+		}
 		if err != nil {
 			cl.FnFailed(name, err)
 			if err == ErrInterrupt {
@@ -563,4 +596,16 @@ func argString(pfx string, args []string, sfx string) string {
 		return ""
 	}
 	return pfx + strings.Join(args, " ") + sfx
+}
+
+func (cl *CmdLine) Getenv(name string) string {
+	list := cl.envStack.Get(name)
+	if len(list) != 0 {
+		return list[0]
+	}
+	return ""
+}
+
+func (cl *CmdLine) Setenv(name, value string) {
+	cl.envStack.Set(name, []string{value})
 }
