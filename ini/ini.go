@@ -2,11 +2,68 @@ package ini
 
 import (
 	"bufio"
+	"flag"
 	"io"
+	"os"
 	"strings"
+
+	"golang.org/x/tools/godoc/vfs"
 
 	"github.com/knieriem/text/tidata"
 )
+
+var ns = vfs.NameSpace{}
+
+type File struct {
+	name       string
+	short      string
+	overridden string
+	ns         vfs.NameSpace
+	Using      string
+}
+
+func NewFile(name, short, option string) (f *File) {
+	f = new(File)
+	f.name = name
+	f.short = short
+	if option != "" {
+		flag.StringVar(&f.overridden, option, "", "specify an alternative configuration file")
+	}
+	return
+}
+
+func BindFS(fs vfs.FileSystem) {
+	ns.Bind("/", fs, "/", vfs.BindBefore)
+}
+
+func (f *File) Parse(conf interface{}) (err error) {
+	var r io.ReadCloser
+
+	name := f.name
+	using := "no " + f.short + " file"
+	defer func() {
+		f.Using = "using " + using
+	}()
+	if f.overridden != "" {
+		name = f.overridden
+		r, err = os.Open(f.overridden)
+		if err != nil {
+			err = nil
+			return
+		}
+		using = f.short + " from cmd line"
+	} else {
+		r, err = ns.Open(name)
+		if err != nil {
+			err = nil
+			return
+		}
+		using = "asset .ini"
+	}
+	err = Parse(r, conf)
+	r.Close()
+	return
+}
 
 var MultiStringSep string
 
