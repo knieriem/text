@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"golang.org/x/tools/godoc/vfs"
+	"te/vfsutil"
 
 	"github.com/knieriem/text/tidata"
 )
@@ -40,7 +41,8 @@ func (f *File) Parse(conf interface{}) (err error) {
 	var r io.ReadCloser
 
 	name := f.name
-	using := "no " + f.short + " file"
+	ini := f.short
+	using := "no " + ini + " file"
 	defer func() {
 		f.Using = "using " + using
 	}()
@@ -51,14 +53,22 @@ func (f *File) Parse(conf interface{}) (err error) {
 			err = nil
 			return
 		}
-		using = f.short + " from cmd line"
+		using = ini + " from cmd line"
 	} else {
 		r, err = ns.Open(name)
 		if err != nil {
 			err = nil
 			return
 		}
-		using = "asset .ini"
+		using = ini
+		if lb, ok := r.(vfsutil.Label); ok {
+			s := lb.Label()
+			if s == "builtin" {
+				using = "builtin " + ini
+			} else {
+				using += " from " + s
+			}
+		}
 	}
 	err = Parse(r, conf)
 	r.Close()
