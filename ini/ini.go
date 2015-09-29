@@ -5,6 +5,8 @@ import (
 	"flag"
 	"io"
 	"os"
+	"os/user"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/tools/godoc/vfs"
@@ -35,6 +37,15 @@ func NewFile(name, short, option string) (f *File) {
 
 func BindFS(fs vfs.FileSystem) {
 	ns.Bind("/", fs, "/", vfs.BindBefore)
+}
+
+func BindHomeLib() {
+	u, err := user.Current()
+	if err != nil || u.HomeDir == "" {
+		return
+	}
+	lib := filepath.Join(u.HomeDir, "lib")
+	ns.Bind("/", vfsutil.LabeledOS(lib, "$home/lib"), "/", vfs.BindBefore)
 }
 
 func (f *File) Parse(conf interface{}) (err error) {
