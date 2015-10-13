@@ -22,22 +22,24 @@ const (
 )
 
 type Cmd struct {
-	Map       map[string]Cmd
-	Fn        func(arg []string) error
-	Arg       []string
-	Opt       []string
-	Help      string
-	Hidden    bool
-	Group     string
-	Flags     string
-	InitFlags func(f *flag.FlagSet)
-	ignoreEnv bool
+	Map         map[string]Cmd
+	Fn          func(arg []string) error
+	Arg         []string
+	Opt         []string
+	Help        string
+	Hidden      bool
+	Group       string
+	Flags       string
+	InitFlags   func(f *flag.FlagSet)
+	ignoreEnv   bool
+	hideFailure bool
 }
 
 type CmdLine struct {
 	*cmdLineReader
 	cur         stackEntry
 	inputStack  []stackEntry
+	lastOk      bool
 	savedPrompt string
 	tok         *rc.Tokenizer
 	envStack    rc.EnvStack
@@ -85,6 +87,67 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 			},
 			Help:      "Read commands from FILE.",
 			ignoreEnv: true,
+		},
+		"if": {
+			Arg: []string{"CMD", "..."},
+			Fn: func(arg []string) (err error) {
+				cmd, err := cl.parseCmd(arg[len(arg)-1:])
+				if err != nil {
+					return
+				}
+				if arg[1] == "not" {
+					if cl.cur.cond.result == nil {
+						err = errors.New("`if not' does not follow `if'")
+						return
+					}
+					if !*cl.cur.cond.result {
+						cl.pushStringStack(cmd)
+					}
+					return
+				}
+				cond := rc.Join(arg[1:len(arg)-1]) + "\n" + "_testcond\n"
+				cl.pushStringStack(cond)
+				cl.cur.cond.cmd = cmd
+				return nil
+			},
+		},
+		"_testcond": {
+			Hidden: true,
+			Fn: func([]string) (err error) {
+				cond := &cl.cur.cond
+				cmd := cond.cmd
+				if cmd == "" {
+					return
+				}
+				cond.cmd = ""
+				ok := cl.lastOk
+				cl.inputStack[len(cl.inputStack)-1].cond.result = &ok
+				if ok {
+					cl.pushStringStack(cmd)
+				}
+				return nil
+			},
+		},
+		"!": {
+			hideFailure: true,
+			Opt:         []string{"CMD", "..."},
+			Fn: func(arg []string) (err error) {
+				if len(arg) == 1 {
+					return errors.New("false")
+				}
+				cmd := rc.Join(arg[1:]) + "\n" + "_!\n"
+				cl.pushStringStack(cmd)
+				return nil
+			},
+		},
+		"_!": {
+			hideFailure: true,
+			Fn: func([]string) (err error) {
+				if cl.lastOk {
+					err = errors.New("false")
+				}
+				return
+			},
 		},
 		"fn": {
 			Opt: []string{"NAME", "CMD", "..."},
@@ -193,6 +256,10 @@ type stackEntry struct {
 	nRepeat    int
 	rewind     func() io.ReadCloser
 	popEnv     bool
+	cond       struct {
+		cmd    string
+		result *bool
+	}
 }
 
 func (cl *CmdLine) pushStack(rc io.ReadCloser, nRepeat int, rewind func() io.ReadCloser) {
@@ -348,12 +415,14 @@ func (cl *CmdLine) Process() (err error) {
 				cl.fwd([]byte(cl.Text() + "\n"))
 			} else {
 				cl.FnNotFound(name)
+				cl.lastOk = false
 			}
 			continue
 		}
 		if cmd.Map != nil {
 			if cmd, ok = cmd.Map[""]; !ok {
 				cl.FnNotFound(name)
+				cl.lastOk = false
 				continue
 			}
 		}
@@ -379,11 +448,13 @@ func (cl *CmdLine) Process() (err error) {
 		nmin = narg
 		if n > narg+nopt {
 			cl.FnWrongNArg(name)
+			cl.lastOk = false
 			continue
 		}
 	checkNMin:
 		if n < nmin {
 			cl.FnWrongNArg(name)
+			cl.lastOk = false
 			continue
 		}
 		if privEnv {
@@ -392,6 +463,11 @@ func (cl *CmdLine) Process() (err error) {
 			}
 		}
 		err = cmd.Fn(args) // run it
+		cl.lastOk = err == nil
+		cl.cur.cond.result = nil
+		if cmd.hideFailure {
+			err = nil
+		}
 		if privEnv {
 			cl.envStack.Pop()
 		}
