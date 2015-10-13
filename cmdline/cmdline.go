@@ -567,6 +567,7 @@ func (cl *CmdLine) help(w io.Writer, args []string) {
 	if len(args) > 0 {
 		cmdName = args[0]
 	}
+	isDir := len(args) == 0
 	pfx := ""
 	m := cl.cmdMap
 retry:
@@ -578,6 +579,7 @@ retry:
 				if v.Map != nil {
 					pfx += cmdName + "."
 					cmdName = ""
+					isDir = true
 					m = v.Map
 					goto retry
 				}
@@ -643,7 +645,7 @@ retry:
 
 		for _, name := range names {
 			v := gm[name]
-			if v.Hidden && len(args) == 0 {
+			if v.Hidden && isDir {
 				continue
 			}
 			flags := v.Flags
