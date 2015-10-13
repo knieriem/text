@@ -172,8 +172,8 @@ a single command, or a block enclosed in '{' and '}':
 	}
 	cl.cIntr = make(chan int, 0)
 	cl.tok = new(rc.Tokenizer)
-	cl.tok.Getenv = cl.envStack.Get
 	cl.envStack.Push(nil)
+	cl.tok.Getenv = cl.envStack.Get
 	return cl
 }
 
