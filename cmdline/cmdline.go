@@ -209,6 +209,10 @@ func (cl *CmdLine) pushStack(rc io.ReadCloser, nRepeat int, rewind func() io.Rea
 	}
 }
 
+func (cl *CmdLine) pushStringStack(cmds string) {
+	cl.pushStack(ioutil.NopCloser(strings.NewReader(cmds)), 0, nil)
+}
+
 func (cl *CmdLine) popStack() {
 	if cl.cur.popEnv {
 		cl.envStack.Pop()
@@ -313,7 +317,7 @@ func (cl *CmdLine) Process() (err error) {
 			if privEnv {
 				cl.envStack.Push(c.Assignments)
 			}
-			cl.pushStack(ioutil.NopCloser(strings.NewReader(body)), 0, nil)
+			cl.pushStringStack(body)
 			cl.cur.popEnv = privEnv
 			continue
 		}
