@@ -12,7 +12,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
+	gioutil "github.com/knieriem/g/ioutil"
 	"github.com/knieriem/text"
 	"github.com/knieriem/text/rc"
 )
@@ -498,11 +500,12 @@ func (cl *CmdLine) scanBlock() (block string, err error) {
 			}
 			return
 		}
-		s := strings.TrimSpace(cl.Text())
+		s := strings.TrimRightFunc(cl.Text(), unicode.IsSpace)
 		if s == "}" {
 			break
 		}
-		block += "\t" + s + "\n"
+		s = strings.TrimPrefix(s, "\t")
+		block += s + "\n"
 	}
 	return
 }
@@ -513,7 +516,8 @@ func (cl *CmdLine) dumpFunc(name string) {
 		return
 	}
 	fmt.Fprintln(os.Stdout, "fn", name, "{")
-	fmt.Fprint(os.Stdout, body)
+	inw := gioutil.NewIndentWriter(os.Stdout, []byte{'\t'})
+	fmt.Fprint(inw, body)
 	fmt.Fprintln(os.Stdout, "}")
 	return
 }
