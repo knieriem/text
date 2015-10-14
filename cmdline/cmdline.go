@@ -90,6 +90,14 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 			Help:      "Read commands from FILE.",
 			ignoreEnv: true,
 		},
+		"echo": {
+			Opt: []string{"ARG", "..."},
+			Fn: func(arg []string) (err error) {
+				_, err = fmt.Fprintln(cl.Stdout, strings.Join(arg[1:], " "))
+				return
+			},
+			Help: "Print arguments.",
+		},
 		"if": {
 			Arg: []string{"CMD", "..."},
 			Fn: func(arg []string) (err error) {
