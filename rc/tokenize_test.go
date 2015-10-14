@@ -61,6 +61,14 @@ var tokenizeCmdTests = []testSpec{
 			"bar": {"baz"},
 		},
 	}, {
+		input: "$foo=$ba:o $ba/o fo/o",
+		fields: []string{
+			"fo/o", "fo/o",
+		},
+		assignments: EnvMap{
+			"bar": {"fo:o"},
+		},
+	}, {
 		input: "#foo",
 	}, {
 		input: "a #foo",

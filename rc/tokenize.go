@@ -3,6 +3,7 @@ package rc
 
 import (
 	"fmt"
+	"unicode"
 )
 
 // An implementation of Plan 9's tokenize (see
@@ -310,6 +311,12 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 			addField(i)
 			return
 		default:
+			if _, ok := t.(*varRefToken); ok {
+				if !unicode.IsLetter(r) && r != '_' && !unicode.IsDigit(r) {
+					flushToken(i)
+					continue
+				}
+			}
 			if i0 == -1 {
 				i0 = i
 			}
