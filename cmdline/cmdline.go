@@ -59,7 +59,8 @@ type CmdLine struct {
 	FnFailed     func(string, error)
 	FnWrongNArg  func(string)
 
-	cIntr chan int
+	cIntr    chan int
+	exitFlag bool
 }
 
 type cmdLineReader struct {
@@ -218,6 +219,13 @@ a single command, or a block enclosed in '{' and '}':
 			},
 			Arg:  []string{"DURATION"},
 			Help: "Sleep for the specified duration.",
+		},
+		"exit": {
+			Fn: func([]string) error {
+				cl.exitFlag = true
+				return nil
+			},
+			Help: "Terminate the command line processor.",
 		},
 	}
 	if _, ok := m["builtin"]; !ok {
@@ -490,6 +498,9 @@ func (cl *CmdLine) Process() (err error) {
 			if err == ErrInterrupt {
 				cl.popStackAll()
 			}
+		}
+		if cl.exitFlag {
+			break
 		}
 	}
 	return
