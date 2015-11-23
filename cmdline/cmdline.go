@@ -252,14 +252,16 @@ a single command, or a block enclosed in '{' and '}':
 	return cl
 }
 
-func (cl *CmdLine) Interrupt(timeout time.Duration) (ok bool) {
+func (cl *CmdLine) Interrupt(timeout time.Duration, intrC chan<- error) (ok bool) {
 	t := time.NewTimer(timeout)
 	select {
 	case <-t.C:
+		return
+	case intrC <- ErrInterrupt:
 	case cl.cIntr <- 1:
-		t.Stop()
-		ok = true
 	}
+	t.Stop()
+	ok = true
 	return
 }
 
