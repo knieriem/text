@@ -27,6 +27,12 @@ type Tokenizer struct {
 type CmdLine struct {
 	Assignments EnvMap
 	Fields      []string
+	Redir       Redirection
+}
+
+type Redirection struct {
+	Type     string
+	FileName string
 }
 
 // ParseCmdLine is similar to Tokenize in that  a string is separated into fields, and
@@ -47,6 +53,7 @@ func (tok *Tokenizer) ParseCmdLine(s string) (c *CmdLine, err error) {
 	}
 	c = new(CmdLine)
 	c.Fields = tokens.fields()
+	c.Redir = tokens.redirection()
 	if nAssign != 0 {
 		c.Assignments = make(EnvMap, nAssign)
 		for _, t := range tokens[:nAssign] {
@@ -76,6 +83,9 @@ type assignmentToken struct {
 	stringToken
 	name token
 }
+type redirToken struct {
+	*stringToken
+}
 
 func (t assignmentToken) String() string {
 	return t.name.String() + string(t.stringToken)
@@ -101,10 +111,29 @@ func (list groupToken) String() (s string) {
 func (groupToken) setString(_ string) {}
 
 func (list groupToken) fields() (f []string) {
-	for _, tok := range list {
-		f = append(f, tok.String())
+	for _, t := range list {
+		if _, ok := t.(*redirToken); ok {
+			break
+		}
+		f = append(f, t.String())
 	}
 	return
+}
+
+func (list groupToken) redirection() Redirection {
+	var r Redirection
+	inRedir := false
+	for _, t := range list {
+		if inRedir {
+			r.FileName = t.String()
+			break
+		}
+		if _, ok := t.(*redirToken); ok {
+			inRedir = true
+			r.Type = t.String()
+		}
+	}
+	return r
 }
 
 func dump(list groupToken, indent string) {
@@ -276,6 +305,12 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 		}
 
 		switch r {
+		case '<', '>':
+			addField(i)
+			t = &redirToken{
+				stringToken: new(stringToken),
+			}
+			i0 = i
 		case '$':
 			flushToken(i)
 			t = new(varRefToken)

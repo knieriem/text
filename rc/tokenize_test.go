@@ -8,6 +8,7 @@ type testSpec struct {
 	input       string
 	fields      []string
 	assignments EnvMap
+	redir       Redirection
 	mustFail    bool
 }
 
@@ -86,6 +87,18 @@ var tokenizeCmdTests = []testSpec{
 	}, {
 		input:    "^a",
 		mustFail: true,
+	}, {
+		input: "a b > c",
+		fields: []string{
+			"a", "b",
+		},
+		redir: Redirection{Type: ">", FileName: "c"},
+	}, {
+		input: "a b< c",
+		fields: []string{
+			"a", "b",
+		},
+		redir: Redirection{Type: "<", FileName: "c"},
 	},
 }
 
@@ -114,6 +127,10 @@ func TestTokenizeCmd(t *testing.T) {
 		compareStringSlices(t, test.fields, cmd.Fields, "field", i)
 		if n1, n2 := len(test.assignments), len(cmd.Assignments); n1 != n2 {
 			t.Errorf("[%d] number of assignments don't match: %d != %d", i, n1, n2)
+			continue
+		}
+		if r1, r2 := test.redir, cmd.Redir; r1.Type != r2.Type || r1.FileName != r2.FileName {
+			t.Errorf("[%d] redirection doesn't match: %v != %v", i, r1, r2)
 			continue
 		}
 		for name, val1 := range test.assignments {
