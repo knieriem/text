@@ -84,7 +84,7 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 			Fn: func(arg []string) (err error) {
 				f, err := os.Open(arg[1])
 				if err == nil {
-					cl.pushStack(f, 0, nil)
+					cl.pushStack(f, nil, nil)
 				}
 				return
 			},
@@ -195,12 +195,12 @@ a single command, or a block enclosed in '{' and '}':
 			Help: "Unbind a function.",
 		},
 		"repeat": {
-			Arg: []string{"N", "CMD"},
+			Arg: []string{"{N|T}", "CMD"},
 			Opt: []string{"ARG", "..."},
 			Fn: func(arg []string) error {
 				return cl.repeatCmd(arg[1:])
 			},
-			Help: "Repeat a command N times.",
+			Help: "Repeat a command N times, or for a specified duration T.",
 		},
 		"sleep": {
 			Fn: func(arg []string) (err error) {
@@ -275,7 +275,7 @@ func (cl *CmdLine) Interrupt(timeout time.Duration, intrC chan<- error) (ok bool
 
 type stackEntry struct {
 	lineReader *cmdLineReader
-	nRepeat    int
+	repetition *repetition
 	rewind     func() io.ReadCloser
 	popEnv     bool
 	cond       struct {
@@ -284,11 +284,11 @@ type stackEntry struct {
 	}
 }
 
-func (cl *CmdLine) pushStack(rc io.ReadCloser, nRepeat int, rewind func() io.ReadCloser) {
+func (cl *CmdLine) pushStack(rc io.ReadCloser, rpt *repetition, rewind func() io.ReadCloser) {
 	cl.inputStack = append(cl.inputStack, cl.cur)
 	cl.cur = stackEntry{
 		lineReader: newCmdLineReader(bufio.NewScanner(rc), rc),
-		nRepeat:    nRepeat,
+		repetition: rpt,
 		rewind:     rewind,
 	}
 	cl.cmdLineReader = cl.cur.lineReader
@@ -299,7 +299,7 @@ func (cl *CmdLine) pushStack(rc io.ReadCloser, nRepeat int, rewind func() io.Rea
 }
 
 func (cl *CmdLine) pushStringStack(cmds string) {
-	cl.pushStack(ioutil.NopCloser(strings.NewReader(cmds)), 0, nil)
+	cl.pushStack(ioutil.NopCloser(strings.NewReader(cmds)), nil, nil)
 }
 
 func (cl *CmdLine) popStack() {
@@ -359,8 +359,7 @@ func (cl *CmdLine) Process() (err error) {
 			err = cl.Err()
 			if err == nil {
 				if sz := len(cl.inputStack); sz != 0 {
-					if cl.cur.nRepeat > 1 {
-						cl.cur.nRepeat--
+					if !cl.cur.repetition.done() {
 						rc := cl.cur.rewind()
 						cl.cur.lineReader = newCmdLineReader(bufio.NewScanner(rc), rc)
 						cl.cmdLineReader = cl.cur.lineReader
@@ -566,12 +565,39 @@ func (cl *CmdLine) parseCmd(f []string) (cmd string, err error) {
 	return
 }
 
-func (cl *CmdLine) repeatCmd(arg []string) (err error) {
-	i, err := strconv.ParseUint(arg[0], 10, 0)
-	if err != nil {
-		return
+type repetition struct {
+	n   int
+	end time.Time
+}
+
+func (r *repetition) done() bool {
+	if r == nil {
+		return true
 	}
-	if i == 0 {
+	if r.n > 1 {
+		r.n--
+		return false
+	}
+	if r.n == 0 {
+		if !r.end.IsZero() {
+			return time.Now().After(r.end)
+		}
+	}
+	return true
+}
+
+func (cl *CmdLine) repeatCmd(arg []string) (err error) {
+	var i uint64
+	var d time.Duration
+
+	d, err = time.ParseDuration(arg[0])
+	if err != nil {
+		i, err = strconv.ParseUint(arg[0], 10, 0)
+		if err != nil {
+			return
+		}
+	}
+	if i == 0 && d == 0 {
 		return
 	}
 	cmd, err := cl.parseCmd(arg[1:])
@@ -581,7 +607,11 @@ func (cl *CmdLine) repeatCmd(arg []string) (err error) {
 	rewind := func() io.ReadCloser {
 		return ioutil.NopCloser(strings.NewReader(cmd))
 	}
-	cl.pushStack(rewind(), int(i), rewind)
+	r := &repetition{
+		n:   int(i),
+		end: time.Now().Add(d),
+	}
+	cl.pushStack(rewind(), r, rewind)
 	return
 
 }
