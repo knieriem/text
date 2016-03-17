@@ -92,13 +92,13 @@ var tokenizeCmdTests = []testSpec{
 		fields: []string{
 			"a", "b",
 		},
-		redir: Redirection{Type: ">", FileName: "c"},
+		redir: Redirection{Type: ">", Filename: "c"},
 	}, {
 		input: "a b< c",
 		fields: []string{
 			"a", "b",
 		},
-		redir: Redirection{Type: "<", FileName: "c"},
+		redir: Redirection{Type: "<", Filename: "c"},
 	},
 }
 
@@ -129,7 +129,7 @@ func TestTokenizeCmd(t *testing.T) {
 			t.Errorf("[%d] number of assignments don't match: %d != %d", i, n1, n2)
 			continue
 		}
-		if r1, r2 := test.redir, cmd.Redir; r1.Type != r2.Type || r1.FileName != r2.FileName {
+		if r1, r2 := test.redir, cmd.Redir; r1.Type != r2.Type || r1.Filename != r2.Filename {
 			t.Errorf("[%d] redirection doesn't match: %v != %v", i, r1, r2)
 			continue
 		}

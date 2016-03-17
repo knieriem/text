@@ -32,7 +32,7 @@ type CmdLine struct {
 
 type Redirection struct {
 	Type     string
-	FileName string
+	Filename string
 }
 
 // ParseCmdLine is similar to Tokenize in that  a string is separated into fields, and
@@ -125,7 +125,7 @@ func (list groupToken) redirection() Redirection {
 	inRedir := false
 	for _, t := range list {
 		if inRedir {
-			r.FileName = t.String()
+			r.Filename = t.String()
 			break
 		}
 		if _, ok := t.(*redirToken); ok {
