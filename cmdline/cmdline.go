@@ -25,7 +25,7 @@ const (
 
 type Cmd struct {
 	Map         map[string]Cmd
-	Fn          func(arg []string) error
+	Fn          func(_ text.Writer, arg []string) error
 	Arg         []string
 	Opt         []string
 	Help        string
@@ -59,8 +59,9 @@ type CmdLine struct {
 	FnFailed     func(string, error)
 	FnWrongNArg  func(string)
 
-	cIntr    chan int
-	exitFlag bool
+	cIntr        chan int
+	exitFlag     bool
+	redirFileMap map[string]*os.File
 }
 
 type cmdLineReader struct {
@@ -81,10 +82,10 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 	builtinCmdMap := map[string]Cmd{
 		".": {
 			Arg: []string{"FILE"},
-			Fn: func(arg []string) (err error) {
+			Fn: func(w text.Writer, arg []string) (err error) {
 				f, err := os.Open(arg[1])
 				if err == nil {
-					cl.pushStack(f, nil, nil)
+					cl.pushStack(f, nil, nil, w)
 				}
 				return
 			},
@@ -93,15 +94,15 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 		},
 		"echo": {
 			Opt: []string{"ARG", "..."},
-			Fn: func(arg []string) (err error) {
-				_, err = fmt.Fprintln(cl.Stdout, strings.Join(arg[1:], " "))
+			Fn: func(w text.Writer, arg []string) (err error) {
+				_, err = w.Println(strings.Join(arg[1:], " "))
 				return
 			},
 			Help: "Print arguments.",
 		},
 		"if": {
 			Arg: []string{"CMD", "..."},
-			Fn: func(arg []string) (err error) {
+			Fn: func(w text.Writer, arg []string) (err error) {
 				cmd, err := cl.parseCmd(arg[len(arg)-1:])
 				if err != nil {
 					return
@@ -112,19 +113,19 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 						return
 					}
 					if !*cl.cur.cond.result {
-						cl.pushStringStack(cmd)
+						cl.pushStringStack(cmd, w)
 					}
 					return
 				}
 				cond := rc.Join(arg[1:len(arg)-1]) + "\n" + "_testcond\n"
-				cl.pushStringStack(cond)
+				cl.pushStringStack(cond, w)
 				cl.cur.cond.cmd = cmd
 				return nil
 			},
 		},
 		"_testcond": {
 			Hidden: true,
-			Fn: func([]string) (err error) {
+			Fn: func(w text.Writer, _ []string) (err error) {
 				cond := &cl.cur.cond
 				cmd := cond.cmd
 				if cmd == "" {
@@ -134,7 +135,7 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 				ok := cl.lastOk
 				cl.inputStack[len(cl.inputStack)-1].cond.result = &ok
 				if ok {
-					cl.pushStringStack(cmd)
+					cl.pushStringStack(cmd, w)
 				}
 				return nil
 			},
@@ -142,18 +143,18 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 		"!": {
 			hideFailure: true,
 			Opt:         []string{"CMD", "..."},
-			Fn: func(arg []string) (err error) {
+			Fn: func(w text.Writer, arg []string) (err error) {
 				if len(arg) == 1 {
 					return errors.New("false")
 				}
 				cmd := rc.Join(arg[1:]) + "\n" + "_!\n"
-				cl.pushStringStack(cmd)
+				cl.pushStringStack(cmd, w)
 				return nil
 			},
 		},
 		"_!": {
 			hideFailure: true,
-			Fn: func([]string) (err error) {
+			Fn: func(text.Writer, []string) (err error) {
 				if cl.lastOk {
 					err = errors.New("false")
 				}
@@ -162,15 +163,15 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 		},
 		"fn": {
 			Opt: []string{"NAME", "CMD", "..."},
-			Fn: func(arg []string) error {
+			Fn: func(w text.Writer, arg []string) error {
 				switch len(arg) {
 				case 1:
 					for name := range cl.funcMap {
-						cl.dumpFunc(name)
+						cl.dumpFunc(w, name)
 					}
 					return nil
 				case 2:
-					cl.dumpFunc(arg[1])
+					cl.dumpFunc(w, arg[1])
 					return nil
 				}
 				return cl.parseFunc(arg[1], arg[2:])
@@ -184,7 +185,7 @@ a single command, or a block enclosed in '{' and '}':
 		},
 		"unbind": {
 			Arg: []string{"NAME"},
-			Fn: func(arg []string) (err error) {
+			Fn: func(_ text.Writer, arg []string) (err error) {
 				if _, ok := cl.funcMap[arg[1]]; !ok {
 					err = errors.New("function not found")
 					return
@@ -197,13 +198,13 @@ a single command, or a block enclosed in '{' and '}':
 		"repeat": {
 			Arg: []string{"{N|T}", "CMD"},
 			Opt: []string{"ARG", "..."},
-			Fn: func(arg []string) error {
-				return cl.repeatCmd(arg[1:])
+			Fn: func(w text.Writer, arg []string) error {
+				return cl.repeatCmd(w, arg[1:])
 			},
 			Help: "Repeat a command N times, or for a specified duration T.",
 		},
 		"sleep": {
-			Fn: func(arg []string) (err error) {
+			Fn: func(_ text.Writer, arg []string) (err error) {
 				tArg, err := time.ParseDuration(arg[1])
 				if err != nil {
 					return
@@ -221,7 +222,7 @@ a single command, or a block enclosed in '{' and '}':
 			Help: "Sleep for the specified duration.",
 		},
 		"exit": {
-			Fn: func([]string) error {
+			Fn: func(text.Writer, []string) error {
 				cl.exitFlag = true
 				return nil
 			},
@@ -260,6 +261,46 @@ a single command, or a block enclosed in '{' and '}':
 	return cl
 }
 
+func (cl *CmdLine) cleanup() {
+	for _, file := range cl.redirFileMap {
+		file.Close()
+	}
+}
+
+func (cl *CmdLine) redirect(op string, filename string) (text.Writer, error) {
+	var err error
+
+	if m := cl.redirFileMap; m == nil {
+		cl.redirFileMap = make(map[string]*os.File, 16)
+	}
+	file := cl.redirFileMap[filename]
+	owflags := os.O_CREATE | os.O_RDWR
+	switch op {
+	case ">":
+		if file != nil {
+			file.Seek(0, 0)
+			file.Truncate(0)
+			goto opened
+		}
+		owflags |= os.O_TRUNC
+	case ">>":
+		if file != nil {
+			goto opened
+		}
+		owflags |= os.O_APPEND
+	default:
+		return nil, errors.New("redirection type not supported")
+	}
+	file, err = os.OpenFile(filename, owflags, 0644)
+	if err != nil {
+		return nil, err
+	}
+	cl.redirFileMap[filename] = file
+opened:
+	w := &writer{Writer: file}
+	return w, nil
+}
+
 func (cl *CmdLine) Interrupt(timeout time.Duration, intrC chan<- error) (ok bool) {
 	t := time.NewTimer(timeout)
 	select {
@@ -277,6 +318,7 @@ type stackEntry struct {
 	lineReader *cmdLineReader
 	repetition *repetition
 	rewind     func() io.ReadCloser
+	w          text.Writer
 	popEnv     bool
 	cond       struct {
 		cmd    string
@@ -284,12 +326,13 @@ type stackEntry struct {
 	}
 }
 
-func (cl *CmdLine) pushStack(rc io.ReadCloser, rpt *repetition, rewind func() io.ReadCloser) {
+func (cl *CmdLine) pushStack(rc io.ReadCloser, rpt *repetition, rewind func() io.ReadCloser, w text.Writer) {
 	cl.inputStack = append(cl.inputStack, cl.cur)
 	cl.cur = stackEntry{
 		lineReader: newCmdLineReader(bufio.NewScanner(rc), rc),
 		repetition: rpt,
 		rewind:     rewind,
+		w:          w,
 	}
 	cl.cmdLineReader = cl.cur.lineReader
 	if cl.Prompt != "" {
@@ -298,8 +341,8 @@ func (cl *CmdLine) pushStack(rc io.ReadCloser, rpt *repetition, rewind func() io
 	}
 }
 
-func (cl *CmdLine) pushStringStack(cmds string) {
-	cl.pushStack(ioutil.NopCloser(strings.NewReader(cmds)), nil, nil)
+func (cl *CmdLine) pushStringStack(cmds string, w text.Writer) {
+	cl.pushStack(ioutil.NopCloser(strings.NewReader(cmds)), nil, nil, w)
 }
 
 func (cl *CmdLine) popStack() {
@@ -328,7 +371,10 @@ var ErrInterrupt = errors.New("interrupted")
 func (cl *CmdLine) Process() (err error) {
 	var line string
 
+	cl.cur.w = &writer{Writer: os.Stdout}
 	ready := make(chan bool)
+
+	defer cl.cleanup()
 
 	//processLoop:
 	for {
@@ -379,10 +425,18 @@ func (cl *CmdLine) Process() (err error) {
 				goto again
 			}
 		}
+		w := cl.cur.w
 		c, err := cl.tok.ParseCmdLine(line)
 		if err != nil {
-			cl.Errf("%v", err)
+			cl.Errf("%v\n", err)
 			continue
+		}
+		if c.Redir.Type != "" {
+			w, err = cl.redirect(c.Redir.Type, c.Redir.Filename)
+			if err != nil {
+				cl.Errf("%v\n", err)
+				continue
+			}
 		}
 		args := c.Fields
 		if len(args) == 0 {
@@ -405,7 +459,7 @@ func (cl *CmdLine) Process() (err error) {
 			if privEnv {
 				cl.envStack.Push(c.Assignments)
 			}
-			cl.pushStringStack(body)
+			cl.pushStringStack(body, w)
 			cl.cur.popEnv = privEnv
 			continue
 		}
@@ -483,7 +537,7 @@ func (cl *CmdLine) Process() (err error) {
 				cl.envStack.Push(c.Assignments)
 			}
 		}
-		err = cmd.Fn(args) // run it
+		err = cmd.Fn(w, args) // run it
 		cl.lastOk = err == nil
 		cl.cur.cond.result = nil
 		if cmd.hideFailure {
@@ -532,15 +586,15 @@ func (cl *CmdLine) scanBlock() (block string, err error) {
 	return
 }
 
-func (cl *CmdLine) dumpFunc(name string) {
+func (cl *CmdLine) dumpFunc(w text.Writer, name string) {
 	body, ok := cl.funcMap[name]
 	if !ok {
 		return
 	}
-	fmt.Fprintln(os.Stdout, "fn", name, "{")
-	inw := gioutil.NewIndentWriter(os.Stdout, []byte{'\t'})
+	w.Println("fn", name, "{")
+	inw := gioutil.NewIndentWriter(w, []byte{'\t'})
 	fmt.Fprint(inw, body)
-	fmt.Fprintln(os.Stdout, "}")
+	w.Println("}")
 	return
 }
 
@@ -586,7 +640,7 @@ func (r *repetition) done() bool {
 	return true
 }
 
-func (cl *CmdLine) repeatCmd(arg []string) (err error) {
+func (cl *CmdLine) repeatCmd(w text.Writer, arg []string) (err error) {
 	var i uint64
 	var d time.Duration
 
@@ -611,7 +665,7 @@ func (cl *CmdLine) repeatCmd(arg []string) (err error) {
 		n:   int(i),
 		end: time.Now().Add(d),
 	}
-	cl.pushStack(rewind(), r, rewind)
+	cl.pushStack(rewind(), r, rewind, w)
 	return
 
 }
@@ -747,4 +801,17 @@ func (cl *CmdLine) Getenv(name string) string {
 
 func (cl *CmdLine) Setenv(name, value string) {
 	cl.envStack.Set(name, []string{value})
+}
+
+type writer struct {
+	io.Writer
+}
+
+func (w *writer) Printf(format string, arg ...interface{}) (n int, err error) {
+	s := fmt.Sprintf(format, arg...)
+	return w.Println(s)
+}
+
+func (w *writer) Println(arg ...interface{}) (n int, err error) {
+	return fmt.Fprintln(w, arg...)
 }
