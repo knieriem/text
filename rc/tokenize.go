@@ -306,6 +306,9 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 
 		switch r {
 		case '<', '>':
+			if _, ok := t.(*redirToken); ok {
+				break
+			}
 			addField(i)
 			t = &redirToken{
 				stringToken: new(stringToken),
