@@ -95,7 +95,7 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 		"echo": {
 			Opt: []string{"ARG", "..."},
 			Fn: func(w text.Writer, arg []string) (err error) {
-				_, err = w.Println(strings.Join(arg[1:], " "))
+				_, err = w.PrintSlice(arg[1:])
 				return
 			},
 			Help: "Print arguments.",
@@ -254,7 +254,10 @@ a single command, or a block enclosed in '{' and '}':
 	}
 	cl.cIntr = make(chan int, 0)
 	cl.tok = new(rc.Tokenizer)
-	cl.envStack.Push(nil)
+	cl.envStack.Push(rc.EnvMap{
+		"prefix": []string{"\t"},
+		"OFS":    []string{" "},
+	})
 	cl.tok.Getenv = func(key string) []string {
 		return cl.envStack.Get(key)
 	}
@@ -297,7 +300,7 @@ func (cl *CmdLine) redirect(op string, filename string) (text.Writer, error) {
 	}
 	cl.redirFileMap[filename] = file
 opened:
-	w := &writer{Writer: file}
+	w := cl.newWriter(file)
 	return w, nil
 }
 
@@ -371,7 +374,7 @@ var ErrInterrupt = errors.New("interrupted")
 func (cl *CmdLine) Process() (err error) {
 	var line string
 
-	cl.cur.w = &writer{Writer: os.Stdout}
+	cl.cur.w = cl.newWriter(os.Stdout)
 	ready := make(chan bool)
 
 	defer cl.cleanup()
@@ -805,13 +808,35 @@ func (cl *CmdLine) Setenv(name, value string) {
 
 type writer struct {
 	io.Writer
+	fieldSep func() string
+	prefix   func() string
+}
+
+func (cl *CmdLine) newWriter(w io.Writer) *writer {
+	return &writer{
+		Writer: w,
+		fieldSep: func() string {
+			return cl.Getenv("OFS")
+		},
+		prefix: func() string {
+			return cl.Getenv("prefix")
+		},
+	}
 }
 
 func (w *writer) Printf(format string, arg ...interface{}) (n int, err error) {
 	s := fmt.Sprintf(format, arg...)
-	return w.Println(s)
+	return w.print(s + "\n")
 }
 
 func (w *writer) Println(arg ...interface{}) (n int, err error) {
-	return fmt.Fprintln(w, arg...)
+	return w.print(fmt.Sprintln(arg...))
+}
+
+func (w *writer) PrintSlice(args []string) (n int, err error) {
+	return w.print(strings.Join(args, w.fieldSep()) + "\n")
+}
+
+func (w *writer) print(s string) (n int, err error) {
+	return w.Write([]byte(w.prefix() + s))
 }
