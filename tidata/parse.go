@@ -136,7 +136,7 @@ func (r *Reader) handleLevel(inCh <-chan input, ret chan<- []Elem) {
 			}
 			// escaped comment?
 			if r.CommentPrefix != "" {
-				if strings.HasPrefix(in.line, r.CommentPrefixEscaped) {
+				if esc := r.CommentPrefixEscaped; esc != "" && strings.HasPrefix(in.line, esc) {
 					in.line = in.line[1:]
 				} else if strings.HasPrefix(in.line, r.CommentPrefix) { // comment?
 					continue
