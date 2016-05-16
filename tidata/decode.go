@@ -201,7 +201,7 @@ func (d *decoder) decodeStruct(dest reflect.Value, src Elem) {
 	anyIndex = -1
 	for i, n := 0, t.NumField(); i < n; i++ {
 		f := t.Field(i)
-		if f.Type.Kind() == reflect.Slice {
+		if k := f.Type.Kind(); k == reflect.Slice || k == reflect.Map {
 			tag := f.Tag.Get("tidata")
 			if tag == "any" {
 				anyIndex = i
