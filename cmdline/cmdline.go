@@ -2,6 +2,7 @@ package cmdline
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 	"unicode"
 
@@ -45,6 +47,7 @@ type CmdLine struct {
 	savedPrompt string
 	tok         *rc.Tokenizer
 	envStack    rc.EnvStack
+	tplMap      *templateMap
 
 	cmdMap       map[string]Cmd
 	funcMap      map[string]string
@@ -374,6 +377,7 @@ var ErrInterrupt = errors.New("interrupted")
 func (cl *CmdLine) Process() (err error) {
 	var line string
 
+	cl.tplMap = newTemplateMap(16)
 	cl.cur.w = cl.newWriter(os.Stdout)
 	ready := make(chan bool)
 
@@ -813,13 +817,27 @@ type writer struct {
 }
 
 func (cl *CmdLine) newWriter(w io.Writer) *writer {
+	var b bytes.Buffer
+	get := func(name string) string {
+		s, err := strconv.Unquote(`"` + cl.Getenv(name) + `"`)
+		if err != nil {
+			return err.Error()
+		}
+		return s
+	}
 	return &writer{
 		Writer: w,
 		fieldSep: func() string {
-			return cl.Getenv("OFS")
+			return get("OFS")
 		},
 		prefix: func() string {
-			return cl.Getenv("prefix")
+			t, err := cl.tplMap.Get(get("prefix"))
+			if err != nil {
+				return err.Error()
+			}
+			b.Reset()
+			t.Execute(&b, nil)
+			return b.String()
 		},
 	}
 }
@@ -839,4 +857,43 @@ func (w *writer) PrintSlice(args []string) (n int, err error) {
 
 func (w *writer) print(s string) (n int, err error) {
 	return w.Write([]byte(w.prefix() + s))
+}
+
+type templateMap struct {
+	t0   time.Time
+	m    map[string]*template.Template
+	nMax int
+}
+
+func newTemplateMap(nMax int) *templateMap {
+	return &templateMap{
+		t0:   time.Now(),
+		m:    make(map[string]*template.Template, nMax),
+		nMax: nMax,
+	}
+}
+
+func (tm *templateMap) Get(s string) (*template.Template, error) {
+	t, ok := tm.m[s]
+	if ok {
+		return t, nil
+	}
+	t = template.New("")
+	t.Funcs(template.FuncMap{
+		"div": func(dividend, divisor int64) int64 {
+			return dividend / divisor
+		},
+		"now": func() time.Time {
+			return time.Now()
+		},
+		"t0": func() time.Time {
+			return tm.t0
+		},
+	})
+	t, err := t.Parse(s)
+	if err != nil {
+		return nil, err
+	}
+	tm.m[s] = t
+	return t, nil
 }
