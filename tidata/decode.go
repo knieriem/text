@@ -172,6 +172,13 @@ func (d *decoder) decodeStruct(dest reflect.Value, src Elem) {
 	if f := dest.FieldByName("TidataSeen"); f.IsValid() {
 		seenMap = f
 	}
+	if u, ok := dest.Addr().Interface().(Unmarshaler); ok {
+		err := u.UnmarshalTidata(src)
+		if err != nil {
+			d.saveError(err)
+		}
+		return
+	}
 
 	d.cur.field = t.String()
 	if p, ok := dest.Addr().Interface().(StructPreprocessor); ok {
