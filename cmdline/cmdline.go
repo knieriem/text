@@ -593,15 +593,15 @@ func (cl *CmdLine) scanBlock() (block string, err error) {
 	return
 }
 
-func (cl *CmdLine) dumpFunc(w text.Writer, name string) {
+func (cl *CmdLine) dumpFunc(_ text.Writer, name string) {
 	body, ok := cl.funcMap[name]
 	if !ok {
 		return
 	}
-	w.Println("fn", name, "{")
-	inw := gioutil.NewIndentWriter(w, []byte{'\t'})
+	fmt.Fprintln(cl.Stdout, "fn", name, "{")
+	inw := gioutil.NewIndentWriter(cl.Stdout, []byte{'\t'})
 	fmt.Fprint(inw, body)
-	w.Println("}")
+	fmt.Fprintln(cl.Stdout, "}")
 	return
 }
 
