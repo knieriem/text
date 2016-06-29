@@ -378,7 +378,7 @@ func (cl *CmdLine) Process() (err error) {
 	var line string
 
 	cl.tplMap = newTemplateMap(16)
-	cl.cur.w = cl.newWriter(os.Stdout)
+	cl.cur.w = cl.newWriter(cl.Stdout)
 	ready := make(chan bool)
 
 	defer cl.cleanup()
