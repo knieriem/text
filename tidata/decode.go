@@ -364,8 +364,8 @@ retry:
 			list := rc.Tokenize(s)
 			if n = len(list); n > 0 {
 				sl = reflect.MakeSlice(v.Type(), n, n)
-				for i := range list {
-					d.decodeString(sl.Index(i), list[i])
+				for i := 0; i < n; i++ {
+					d.decodeItem(sl.Index(i), Elem{Text: ".\t" + list[i]})
 				}
 			}
 		}
