@@ -494,7 +494,7 @@ func (cl *CmdLine) Process() (err error) {
 				}
 			}
 			if cl.Forward != nil {
-				cl.fwd([]byte(cl.Text() + "\n"))
+				cl.fwd([]byte(rc.Join(args) + "\n"))
 			} else {
 				cl.FnNotFound(name)
 				cl.lastOk = false
