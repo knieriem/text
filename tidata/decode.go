@@ -379,13 +379,16 @@ retry:
 		v.Set(sl)
 	case reflect.Map:
 		d.decodeMap(v, el)
+	case reflect.String:
+		val := el.Value()
+		if val == "" {
+			val = el.joinAllChildren("", d.MultiStringSep)
+		}
+		d.decodeString(v, val)
 	default:
 		val := el.Value()
 		if val == "" {
 			for i := range el.Children {
-				if i > 0 {
-					val += d.MultiStringSep
-				}
 				val += el.Children[i].Text
 			}
 		}
@@ -393,6 +396,7 @@ retry:
 	}
 	d.postProcess(v, el)
 }
+
 func (d *decoder) decodeMap(v reflect.Value, src Elem) {
 	t := v.Type()
 	if v.IsNil() {
