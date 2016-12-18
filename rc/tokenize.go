@@ -3,6 +3,8 @@ package rc
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"unicode"
 )
 
@@ -147,6 +149,9 @@ func dump(list groupToken, indent string) {
 	}
 }
 
+var argrefRE = regexp.MustCompile("^[1-9][0-9]*$")
+var arridxRE = regexp.MustCompile("\\(([0-9]*)\\)$")
+
 func (tok *Tokenizer) expandEnv(t token) token {
 	switch x := t.(type) {
 	case groupToken:
@@ -157,12 +162,25 @@ func (tok *Tokenizer) expandEnv(t token) token {
 	case *assignmentToken:
 		x.name = tok.expandEnv(x.name)
 	case *varRefToken:
-		value := tok.Getenv(x.String()[1:])
-		if len(value) == 0 {
-			value = []string{""}
+		ref := x.String()[1:]
+		i := 0
+		if argrefRE.MatchString(ref) {
+			i, _ = strconv.Atoi(ref)
+			ref = "*"
+		} else if si := arridxRE.FindStringSubmatchIndex(ref); len(si) == 4 {
+			index := ref[si[2]:si[3]]
+			if index != "0" && index != "" {
+				i, _ = strconv.Atoi(index)
+			}
+			ref = ref[:si[0]]
 		}
+		value := tok.Getenv(ref)
 		t = new(stringToken)
-		t.setString(value[0])
+		if len(value) <= i {
+			t.setString("")
+		} else {
+			t.setString(value[i])
+		}
 	}
 	return t
 }
@@ -350,7 +368,7 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 			return
 		default:
 			if _, ok := t.(*varRefToken); ok {
-				if !unicode.IsLetter(r) && r != '_' && !unicode.IsDigit(r) {
+				if !unicode.IsLetter(r) && r != '_' && !unicode.IsDigit(r) && r != '*' && r != '(' && r != ')' {
 					flushToken(i)
 					continue
 				}
