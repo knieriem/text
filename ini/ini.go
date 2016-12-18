@@ -117,6 +117,11 @@ var ticonf = tidata.Config{
 		s := strings.Title(key)
 		s = replaceSpecial(s, "-", "")
 		name = replaceSpecial(s, "/", "Per")
+		if strings.HasSuffix(name, "Id") {
+			name = name[:len(name)-1] + "D"
+		} else if strings.HasSuffix(name, "Url") {
+			name = name[:len(name)-2] + "RL"
+		}
 		return
 	},
 }
