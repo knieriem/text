@@ -260,6 +260,7 @@ a single command, or a block enclosed in '{' and '}':
 	cl.envStack.Push(rc.EnvMap{
 		"prefix": []string{"\t"},
 		"OFS":    []string{" "},
+		"*":      []string{"rc"},
 	})
 	cl.tok.Getenv = func(key string) []string {
 		return cl.envStack.Get(key)
@@ -326,6 +327,7 @@ type stackEntry struct {
 	rewind     func() io.ReadCloser
 	w          text.Writer
 	popEnv     bool
+	savedArgs  []string
 	cond       struct {
 		cmd    string
 		result *bool
@@ -354,6 +356,9 @@ func (cl *CmdLine) pushStringStack(cmds string, w text.Writer) {
 func (cl *CmdLine) popStack() {
 	if cl.cur.popEnv {
 		cl.envStack.Pop()
+	}
+	if a := cl.cur.savedArgs; a != nil {
+		cl.envStack.Set("*", a)
 	}
 	sz := len(cl.inputStack)
 	sz--
@@ -467,7 +472,13 @@ func (cl *CmdLine) Process() (err error) {
 				cl.envStack.Push(c.Assignments)
 			}
 			cl.pushStringStack(body, w)
-			cl.cur.popEnv = privEnv
+			if privEnv {
+				cl.cur.popEnv = true
+			} else {
+				cl.cur.savedArgs = cl.envStack.Get("*")
+			}
+			args[0] = ""
+			cl.envStack.Set("*", args)
 			continue
 		}
 		if name == "help" {
