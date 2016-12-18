@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/user"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -19,7 +20,7 @@ import (
 var ns = vfs.NameSpace{}
 
 type File struct {
-	name       string
+	Name       string
 	short      string
 	overridden string
 	ns         vfs.NameSpace
@@ -28,7 +29,7 @@ type File struct {
 
 func NewFile(name, short, option string) (f *File) {
 	f = new(File)
-	f.name = name
+	f.Name = name
 	f.short = short
 	if option != "" {
 		flag.StringVar(&f.overridden, option, "", "specify an alternative configuration file")
@@ -49,10 +50,37 @@ func BindHomeLib() {
 	ns.Bind("/", vfsutil.LabeledOS(lib, "$home/lib"), "/", vfs.BindBefore)
 }
 
+func BindHomeLibDir(subDir string) {
+	u, err := user.Current()
+	if err != nil || u.HomeDir == "" {
+		return
+	}
+	lib := filepath.Join(u.HomeDir, "lib", subDir)
+	ns.Bind("/", vfsutil.LabeledOS(lib, "$home/lib/" + subDir), "/", vfs.BindBefore)
+}
+
+func LookupFiles(dir, ext string) ([]File, error) {
+	var f []File
+
+	list, err := ns.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	for _, fi := range list {
+		if fi.IsDir() {
+			continue
+		}
+		if path.Ext(fi.Name()) == ext {
+			f = append(f, File{Name: path.Join(dir, fi.Name())})
+		}
+	}
+	return f, nil
+}
+
 func (f *File) Parse(conf interface{}) (err error) {
 	var r io.ReadCloser
 
-	name := f.name
+	name := f.Name
 	ini := f.short
 	using := "no " + ini + " file"
 	defer func() {
@@ -62,15 +90,13 @@ func (f *File) Parse(conf interface{}) (err error) {
 		name = f.overridden
 		r, err = os.Open(f.overridden)
 		if err != nil {
-			err = nil
-			return
+			return nil
 		}
 		using = ini + " from cmd line"
 	} else {
 		r, err = ns.Open(name)
 		if err != nil {
-			err = nil
-			return
+			return nil
 		}
 		using = ini
 		if lb, ok := r.(vfsutil.Label); ok {
@@ -87,7 +113,7 @@ func (f *File) Parse(conf interface{}) (err error) {
 		err = line.ErrInsertFilename(err, name)
 	}
 	r.Close()
-	return
+	return err
 }
 
 var MultiStringSep string
