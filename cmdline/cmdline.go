@@ -98,7 +98,13 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 		"echo": {
 			Opt: []string{"ARG", "..."},
 			Fn: func(w text.Writer, arg []string) (err error) {
-				_, err = w.PrintSlice(arg[1:])
+				arg2 := make([]string, 0, len(arg))
+				for _, a := range arg[1:] {
+					if a != "" {
+						arg2 = append(arg2, a)
+					}
+				}
+				_, err = w.PrintSlice(arg2)
 				return
 			},
 			Help: "Print arguments.",
