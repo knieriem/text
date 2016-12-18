@@ -12,6 +12,7 @@ import (
 	"golang.org/x/tools/godoc/vfs"
 	"te/vfsutil"
 
+	"github.com/knieriem/text/line"
 	"github.com/knieriem/text/tidata"
 )
 
@@ -82,6 +83,9 @@ func (f *File) Parse(conf interface{}) (err error) {
 		}
 	}
 	err = Parse(r, conf)
+	if err != nil {
+		err = line.ErrInsertFilename(err, name)
+	}
 	r.Close()
 	return
 }
