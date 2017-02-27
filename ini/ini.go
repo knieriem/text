@@ -56,7 +56,7 @@ func BindHomeLibDir(subDir string) {
 		return
 	}
 	lib := filepath.Join(u.HomeDir, "lib", subDir)
-	ns.Bind("/", vfsutil.LabeledOS(lib, "$home/lib/" + subDir), "/", vfs.BindBefore)
+	ns.Bind("/", vfsutil.LabeledOS(lib, "$home/lib/"+subDir), "/", vfs.BindBefore)
 }
 
 func LookupFiles(dir, ext string) ([]File, error) {
