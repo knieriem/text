@@ -413,6 +413,10 @@ func (d *decoder) decodeMap(v reflect.Value, src Elem) {
 
 	for i := 0; i < n; i++ {
 		el := src.Children[i]
+		if el.Text == "" {
+			d.saveError(errors.New("<tab> at beginning of empty line"))
+			return
+		}
 		kstr := el.Key()
 		if kstr == el.Text && len(el.Children) == 0 && t.Elem().Kind() == reflect.Bool {
 			// only allowed for map[T]bool
