@@ -12,6 +12,7 @@
 package tidata
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/knieriem/text"
@@ -21,6 +22,7 @@ import (
 type Reader struct {
 	CommentPrefix        string
 	CommentPrefixEscaped string
+	inlineCommentRE      *regexp.Regexp
 	TrimPrefix           string
 	StripUtf8BOM         bool
 
@@ -42,6 +44,12 @@ type input struct {
 // Parse a whole file into atree structure of Elems and return a pointer
 // to the root Elem.
 func (r *Reader) ReadAll() (top *Elem, err error) {
+	if c := r.CommentPrefix; c != "" {
+		r.inlineCommentRE, err = regexp.Compile(`^((?:[^"']|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')*)` + c)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	sub := make(chan input)
 	rsub := make(chan []Elem)
@@ -160,7 +168,13 @@ func (r *Reader) handleLevel(inCh <-chan input, ret chan<- []Elem) {
 				r.errC <- line.NewMsg(in.lineNum, "extra white-space at the end of the line")
 			}
 		}
-		list = append(list, Elem{Text: strings.TrimSpace(in.line), LineNum: in.lineNum})
+		t := in.line
+		ic := r.inlineCommentRE.FindStringSubmatchIndex(t)
+		if len(ic) != 0 {
+			t = t[ic[2]:ic[3]]
+		}
+		t = strings.TrimSpace(t)
+		list = append(list, Elem{Text: t, LineNum: in.lineNum})
 		el = &list[len(list)-1]
 	}
 
