@@ -364,7 +364,7 @@ retry:
 			default:
 				for i := 0; i < n; i++ {
 					c := el.Children[i]
-					d.decodeItem(sl.Index(i), Elem{Text: ".\t" + c.Text, Children: c.Children})
+					d.decodeItem(sl.Index(i), Elem{LineNum: c.LineNum, Text: ".\t" + c.Text, Children: c.Children})
 				}
 			}
 		} else if s := el.Value(); s != "" {
@@ -372,7 +372,7 @@ retry:
 			if n = len(list); n > 0 {
 				sl = reflect.MakeSlice(v.Type(), n, n)
 				for i := 0; i < n; i++ {
-					d.decodeItem(sl.Index(i), Elem{Text: ".\t" + list[i]})
+					d.decodeItem(sl.Index(i), Elem{LineNum: el.LineNum, Text: ".\t" + list[i]})
 				}
 			}
 		}
