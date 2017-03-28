@@ -24,12 +24,13 @@ type Reader struct {
 	TrimPrefix           string
 	StripUtf8BOM         bool
 
-	s    text.Scanner
-	errC chan error
+	s       text.Scanner
+	errC    chan error
+	LineNum int
 }
 
 func NewReader(s text.Scanner) *Reader {
-	return &Reader{s: s}
+	return &Reader{s: s, LineNum: 1}
 }
 
 type input struct {
@@ -57,12 +58,14 @@ func (r *Reader) ReadAll() (top *Elem, err error) {
 
 	nTrimPrefix := len(r.TrimPrefix)
 
-	for n := 1; r.s.Scan(); n++ {
+	first := true
+	for ; r.s.Scan(); r.LineNum++ {
 		line := r.s.Text()
-		if n == 1 && r.StripUtf8BOM {
-			if strings.HasPrefix(line, "\uFEFF") {
+		if first {
+			if r.StripUtf8BOM && strings.HasPrefix(line, "\uFEFF") {
 				line = line[3:]
 			}
+			first = false
 		}
 
 		if nTrimPrefix != 0 {
@@ -72,7 +75,7 @@ func (r *Reader) ReadAll() (top *Elem, err error) {
 		}
 		if len(line) > 0 {
 			select {
-			case sub <- input{insert: true, line: line, lineNum: n}:
+			case sub <- input{insert: true, line: line, lineNum: r.LineNum}:
 			case err = <-r.errC:
 				if err != nil {
 					return
