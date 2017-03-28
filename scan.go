@@ -8,28 +8,35 @@ type Scanner interface {
 
 // Create a Scanner that reads lines up to
 // the first empty line, which is skipped.
-func NewSectionScanner(s Scanner) Scanner {
-	return &sectionScanner{Scanner: s}
+func NewSectionScanner(s Scanner) *SectionScanner {
+	return &SectionScanner{Scanner: s, NumSepLines: 1}
 }
 
-type sectionScanner struct {
+type SectionScanner struct {
 	Scanner
-	text string
+	text        string
+	NumSepLines int
+	n           int
 }
 
-func (s *sectionScanner) Scan() (ok bool) {
+func (s *SectionScanner) Scan() (ok bool) {
 	ok = s.Scanner.Scan()
 	if !ok {
-		return
+		return false
 	}
 	s.text = s.Scanner.Text()
 	if s.text == "" {
-		ok = false
+		s.n++
+		if s.n == s.NumSepLines {
+			return false
+		}
+	} else {
+		s.n = 0
 	}
-	return
+	return true
 }
 
-func (s *sectionScanner) Text() string {
+func (s *SectionScanner) Text() string {
 	return s.text
 }
 
