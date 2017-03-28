@@ -383,6 +383,10 @@ retry:
 		val := el.Value()
 		if val == "" {
 			val = el.joinAllChildren("", d.MultiStringSep)
+		} else if len(el.Children) != 0 {
+			d.cur.line++
+			d.saveError(errors.New("wrong depth/inconsistent structure"))
+			break
 		}
 		d.decodeString(v, val)
 	default:
