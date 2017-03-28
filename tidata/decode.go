@@ -413,6 +413,7 @@ func (d *decoder) decodeMap(v reflect.Value, src Elem) {
 
 	for i := 0; i < n; i++ {
 		el := src.Children[i]
+		d.cur.line = el.LineNum
 		if el.Text == "" {
 			d.saveError(errors.New("<tab> at beginning of empty line"))
 			return
