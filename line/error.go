@@ -39,6 +39,13 @@ func (e *ErrorList) AddError(line int, err error) {
 	e.List = append(e.List, &lineError{error: err, line: line})
 }
 
+func (e *ErrorList) Err() error {
+	if e.List != nil {
+		return e
+	}
+	return nil
+}
+
 func (list *ErrorList) Sort() {
 	sort.Sort(list)
 }
