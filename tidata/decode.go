@@ -422,8 +422,9 @@ func (d *decoder) decodeMap(v reflect.Value, src Elem) {
 			d.saveError(errors.New("<tab> at beginning of empty line"))
 			return
 		}
-		kstr := el.Key()
-		if kstr == el.Text && len(el.Children) == 0 && t.Elem().Kind() == reflect.Bool {
+		f := rc.Tokenize(el.Text)
+		kstr := f[0]
+		if len(f) == 1 && len(el.Children) == 0 && t.Elem().Kind() == reflect.Bool {
 			// only allowed for map[T]bool
 			d.decodeString(key, kstr)
 			val.SetBool(true)
@@ -431,8 +432,6 @@ func (d *decoder) decodeMap(v reflect.Value, src Elem) {
 			if d.MapSym != "" {
 				if strings.HasSuffix(kstr, d.MapSym) {
 					kstr = kstr[:len(kstr)-len(d.MapSym)]
-				} else if j := strings.Index(el.Text, d.MapSym); j == len(kstr) {
-					el.Text = kstr + "\t" + el.Text[j+len(d.MapSym)+1:]
 				} else {
 					d.saveError(errors.New("missing map symbol '" + d.MapSym + "' in mapping"))
 					return
