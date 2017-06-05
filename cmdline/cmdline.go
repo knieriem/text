@@ -836,9 +836,11 @@ type writer struct {
 func (cl *CmdLine) newWriter(w io.Writer) *writer {
 	var b bytes.Buffer
 	get := func(name string) string {
-		s, err := strconv.Unquote(`"` + cl.Getenv(name) + `"`)
+		q := cl.Getenv(name)
+		q = strings.Replace(q, `"`, `\"`, -1)
+		s, err := strconv.Unquote(`"` + q + `"`)
 		if err != nil {
-			return err.Error()
+			return "getenv: unquote: err.Error()"
 		}
 		return s
 	}
