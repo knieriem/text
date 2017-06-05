@@ -441,7 +441,11 @@ func (d *decoder) decodeMap(v reflect.Value, src Elem) {
 			}
 			d.cur.field = kstr
 			d.decodeItem(key, Elem{LineNum: el.LineNum, Text: ".\t" + kstr})
-			d.decodeItem(val, el)
+			if len(el.Children) == 0 {
+				d.decodeItem(val, Elem{LineNum: el.LineNum, Text: ".\t" + strings.Join(f[1:], " ")})
+			} else {
+				d.decodeItem(val, el)
+			}
 		}
 		v.SetMapIndex(key, val)
 		key.Set(reflect.Zero(t.Key()))
