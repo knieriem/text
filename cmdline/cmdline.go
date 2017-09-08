@@ -112,7 +112,7 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 		"if": {
 			Arg: []string{"CMD", "..."},
 			Fn: func(w text.Writer, arg []string) (err error) {
-				cmd, err := cl.parseCmd(arg[len(arg)-1:])
+				cmd, err := cl.ParseCmd(arg[len(arg)-1:])
 				if err != nil {
 					return
 				}
@@ -623,7 +623,7 @@ func (cl *CmdLine) dumpFunc(_ text.Writer, name string) {
 }
 
 func (cl *CmdLine) parseFunc(name string, args []string) (err error) {
-	cmd, err := cl.parseCmd(args)
+	cmd, err := cl.ParseCmd(args)
 	if err != nil {
 		return
 	}
@@ -631,7 +631,7 @@ func (cl *CmdLine) parseFunc(name string, args []string) (err error) {
 	return
 }
 
-func (cl *CmdLine) parseCmd(f []string) (cmd string, err error) {
+func (cl *CmdLine) ParseCmd(f []string) (cmd string, err error) {
 	if f[0] != "{" {
 		cmd = "\t" + rc.Join(f) + "\n"
 		return
@@ -678,7 +678,7 @@ func (cl *CmdLine) repeatCmd(w text.Writer, arg []string) (err error) {
 	if i == 0 && d == 0 {
 		return
 	}
-	cmd, err := cl.parseCmd(arg[1:])
+	cmd, err := cl.ParseCmd(arg[1:])
 	if err != nil {
 		return
 	}
