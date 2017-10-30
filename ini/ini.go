@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/knieriem/vfsutil"
 	"golang.org/x/tools/godoc/vfs"
-	"te/vfsutil"
 
 	"github.com/knieriem/text/line"
 	"github.com/knieriem/text/tidata"
