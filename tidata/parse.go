@@ -169,9 +169,11 @@ func (r *Reader) handleLevel(inCh <-chan input, ret chan<- []Elem) {
 			}
 		}
 		t := in.line
-		ic := r.inlineCommentRE.FindStringSubmatchIndex(t)
-		if len(ic) != 0 {
-			t = t[ic[2]:ic[3]]
+		if re := r.inlineCommentRE; re != nil {
+			ic := re.FindStringSubmatchIndex(t)
+			if len(ic) != 0 {
+				t = t[ic[2]:ic[3]]
+			}
 		}
 		t = strings.TrimSpace(t)
 		list = append(list, Elem{Text: t, LineNum: in.lineNum})
