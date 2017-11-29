@@ -1,6 +1,7 @@
 package tidata
 
 import (
+	"encoding"
 	"errors"
 	"fmt"
 	"reflect"
@@ -172,8 +173,16 @@ func (d *decoder) decodeStruct(dest reflect.Value, src Elem) {
 	if f := dest.FieldByName("TidataSeen"); f.IsValid() {
 		seenMap = f
 	}
-	if u, ok := dest.Addr().Interface().(Unmarshaler); ok {
+	di := dest.Addr().Interface()
+	if u, ok := di.(Unmarshaler); ok {
 		err := u.UnmarshalTidata(src)
+		if err != nil {
+			d.saveError(err)
+		}
+		return
+	}
+	if u, ok := di.(encoding.TextUnmarshaler); ok {
+		err := u.UnmarshalText([]byte(src.Value()))
 		if err != nil {
 			d.saveError(err)
 		}
@@ -331,8 +340,16 @@ func (d *decoder) decodeItem(v reflect.Value, el Elem) {
 		}
 	}()
 
-	if u, ok := v.Addr().Interface().(Unmarshaler); ok {
+	vi := v.Addr().Interface()
+	if u, ok := vi.(Unmarshaler); ok {
 		err := u.UnmarshalTidata(el)
+		if err != nil {
+			d.saveError(err)
+		}
+		return
+	}
+	if u, ok := vi.(encoding.TextUnmarshaler); ok {
+		err := u.UnmarshalText([]byte(el.Value()))
 		if err != nil {
 			d.saveError(err)
 		}
