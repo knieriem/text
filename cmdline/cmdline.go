@@ -61,6 +61,7 @@ type CmdLine struct {
 	FnNotFound   func(string)
 	FnFailed     func(string, error)
 	FnWrongNArg  func(string)
+	Open         func(filename string) (io.ReadCloser, error)
 
 	cIntr        chan int
 	exitFlag     bool
@@ -86,7 +87,7 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 		".": {
 			Arg: []string{"FILE"},
 			Fn: func(w text.Writer, arg []string) (err error) {
-				f, err := os.Open(arg[1])
+				f, err := cl.Open(arg[1])
 				if err == nil {
 					cl.pushStack(f, nil, nil, w)
 				}
@@ -251,6 +252,9 @@ a single command, or a block enclosed in '{' and '}':
 		}
 	}
 
+	cl.Open = func(filename string) (io.ReadCloser, error) {
+		return os.Open(filename)
+	}
 	cl.Errf = func(string, ...interface{}) {}
 	cl.FnNotFound = func(cmd string) {
 		cl.Errf("%s: no such command\n", cmd)
