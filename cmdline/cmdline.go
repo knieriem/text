@@ -271,6 +271,7 @@ a single command, or a block enclosed in '{' and '}':
 	cl.tok.Getenv = func(key string) []string {
 		return cl.envStack.Get(key)
 	}
+	cl.lastOk = true
 	return cl
 }
 
@@ -446,12 +447,14 @@ func (cl *CmdLine) Process() error {
 		c, err := cl.tok.ParseCmdLine(line)
 		if err != nil {
 			cl.Errf("%v\n", err)
+			cl.lastOk = false
 			continue
 		}
 		if c.Redir.Type != "" {
 			w, err = cl.redirect(c.Redir.Type, c.Redir.Filename)
 			if err != nil {
 				cl.Errf("%v\n", err)
+				cl.lastOk = false
 				continue
 			}
 		}
@@ -588,6 +591,10 @@ func (cl *CmdLine) fwd(line []byte) {
 		cl.Errf("forwarding write failed: %v\n", err)
 	}
 
+}
+
+func (cl *CmdLine) LastOK() bool {
+	return cl.lastOk
 }
 
 func (cl *CmdLine) scanBlock() (block string, err error) {
