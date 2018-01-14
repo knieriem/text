@@ -385,7 +385,7 @@ func (cl *CmdLine) popStackAll() {
 
 var ErrInterrupt = errors.New("interrupted")
 
-func (cl *CmdLine) Process() (err error) {
+func (cl *CmdLine) Process() error {
 	var line string
 
 	cl.tplMap = newTemplateMap(16)
@@ -408,8 +408,7 @@ func (cl *CmdLine) Process() (err error) {
 		case scanOk = <-ready:
 		case <-cl.cIntr:
 			if len(cl.inputStack) == 0 {
-				err = ErrInterrupt
-				return
+				return ErrInterrupt
 			} else {
 				cl.Errf("%v\n", ErrInterrupt)
 				cl.popStackAll()
@@ -420,7 +419,7 @@ func (cl *CmdLine) Process() (err error) {
 			}
 		}
 		if !scanOk {
-			err = cl.Err()
+			err := cl.Err()
 			if err == nil {
 				if sz := len(cl.inputStack); sz != 0 {
 					if !cl.cur.repetition.done() {
@@ -433,7 +432,7 @@ func (cl *CmdLine) Process() (err error) {
 					continue
 				}
 			}
-			break
+			return err
 		}
 		line = cl.Text()
 		if cl.Prompt != "" {
@@ -580,7 +579,7 @@ func (cl *CmdLine) Process() (err error) {
 			break
 		}
 	}
-	return
+	return nil
 }
 
 func (cl *CmdLine) fwd(line []byte) {
