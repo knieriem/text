@@ -104,9 +104,16 @@ func (e Elem) Decode(i interface{}, c *Config) (err error) {
 			if _, ok := r.(runtime.Error); ok {
 				panic(r)
 			}
+			if e, ok := r.(error); ok {
+				err = e
+			} else if s, ok := r.(string); ok {
+				err = errors.New(s)
+			} else {
+				err = errors.New("undefined")
+			}
 			err = &Error{
 				line: d.cur.line,
-				Err:  r.(error),
+				Err:  err,
 				Key:  d.cur.field,
 			}
 		}
