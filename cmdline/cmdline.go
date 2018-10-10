@@ -326,8 +326,8 @@ func (cl *CmdLine) Interrupt(timeout time.Duration, intrC chan<- error) (ok bool
 	select {
 	case <-t.C:
 		return
-	case intrC <- ErrInterrupt:
 	case cl.cIntr <- 1:
+	case intrC <- ErrInterrupt:
 	}
 	t.Stop()
 	ok = true
