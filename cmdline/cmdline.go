@@ -3,6 +3,7 @@ package cmdline
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -26,17 +27,18 @@ const (
 )
 
 type Cmd struct {
-	Map         map[string]Cmd
-	Fn          func(_ text.Writer, arg []string) error
-	Arg         []string
-	Opt         []string
-	Help        string
-	Hidden      bool
-	Group       string
-	Flags       string
-	InitFlags   func(f *flag.FlagSet)
-	ignoreEnv   bool
-	hideFailure bool
+	Map           map[string]Cmd
+	Fn            func(_ text.Writer, arg []string) error
+	FnWithContext func(ctx context.Context, _ text.Writer, arg []string) error
+	Arg           []string
+	Opt           []string
+	Help          string
+	Hidden        bool
+	Group         string
+	Flags         string
+	InitFlags     func(f *flag.FlagSet)
+	ignoreEnv     bool
+	hideFailure   bool
 }
 
 type CmdLine struct {
@@ -567,7 +569,23 @@ func (cl *CmdLine) Process() error {
 				cl.envStack.Push(c.Assignments)
 			}
 		}
-		err = cmd.Fn(w, args) // run it
+		if cmd.FnWithContext != nil {
+			ctx := context.Background()
+			ctx, cancel := context.WithCancel(ctx)
+			chOk := make(chan struct{})
+			go func() {
+				select {
+				case <-cl.cIntr:
+					cancel()
+				case <-chOk:
+					return
+				}
+			}()
+			err = cmd.FnWithContext(ctx, w, args)
+			close(chOk)
+		} else {
+			err = cmd.Fn(w, args) // run it
+		}
 		cl.lastOk = err == nil
 		cl.cur.cond.result = nil
 		if cmd.hideFailure {
