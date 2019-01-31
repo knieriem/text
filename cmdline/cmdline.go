@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -172,6 +173,24 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 				}
 				return
 			},
+		},
+		"~": {
+			hideFailure: true,
+			Arg:         []string{"SUBJECT", "PATTERN", "..."},
+			Fn: func(w text.Writer, arg []string) error {
+				subject := arg[1]
+				for _, pat := range arg[2:] {
+					match, err := path.Match(pat, subject)
+					if err != nil {
+						return err
+					}
+					if match {
+						return nil
+					}
+				}
+				return errors.New("no match")
+			},
+			Help: `Returns success if subject matches any pattern.`,
 		},
 		"fn": {
 			Opt: []string{"NAME", "CMD", "..."},
