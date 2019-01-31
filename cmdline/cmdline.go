@@ -54,6 +54,7 @@ type CmdLine struct {
 
 	cmdMap       map[string]Cmd
 	funcMap      map[string]string
+	InitRc       io.ReadCloser
 	ExtraHelp    func()
 	DefaultGroup string
 	Prompt       string
@@ -420,6 +421,9 @@ func (cl *CmdLine) Process() error {
 
 	defer cl.cleanup()
 
+	if cl.InitRc != nil {
+		cl.pushStack(cl.InitRc, nil, nil, cl.cur.w)
+	}
 	//processLoop:
 	for {
 		if cl.Prompt != "" {
