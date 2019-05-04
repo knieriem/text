@@ -67,9 +67,16 @@ type CmdLine struct {
 	FnWrongNArg  func(string)
 	Open         func(filename string) (io.ReadCloser, error)
 
-	cIntr        chan int
-	exitFlag     bool
-	redirFileMap map[string]*os.File
+	cIntr         chan int
+	exitFlag      bool
+	OpenRedirFile func(name string, flag int, perm os.FileMode) (RedirFile, error)
+	redirFileMap  map[string]RedirFile
+}
+
+type RedirFile interface {
+	io.WriteCloser
+	io.Seeker
+	Truncate(size int64) error
 }
 
 type cmdLineReader struct {
@@ -277,6 +284,9 @@ a single command, or a block enclosed in '{' and '}':
 	cl.Open = func(filename string) (io.ReadCloser, error) {
 		return os.Open(filename)
 	}
+	cl.OpenRedirFile = func(name string, flag int, perm os.FileMode) (RedirFile, error) {
+		return os.OpenFile(name, flag, perm)
+	}
 	cl.Errf = func(string, ...interface{}) {}
 	cl.FnNotFound = func(cmd string) {
 		cl.Errf("%s: no such command\n", cmd)
@@ -311,7 +321,7 @@ func (cl *CmdLine) redirect(op string, filename string) (text.Writer, error) {
 	var err error
 
 	if m := cl.redirFileMap; m == nil {
-		cl.redirFileMap = make(map[string]*os.File, 16)
+		cl.redirFileMap = make(map[string]RedirFile, 16)
 	}
 	file := cl.redirFileMap[filename]
 	owflags := os.O_CREATE | os.O_RDWR
@@ -331,7 +341,7 @@ func (cl *CmdLine) redirect(op string, filename string) (text.Writer, error) {
 	default:
 		return nil, errors.New("redirection type not supported")
 	}
-	file, err = os.OpenFile(filename, owflags, 0644)
+	file, err = cl.OpenRedirFile(filename, owflags, 0644)
 	if err != nil {
 		return nil, err
 	}
