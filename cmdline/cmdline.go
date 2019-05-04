@@ -39,7 +39,7 @@ type Cmd struct {
 	Flags         string
 	InitFlags     func(f *flag.FlagSet)
 	ignoreEnv     bool
-	hideFailure   bool
+	HideFailure   bool
 }
 
 type CmdLine struct {
@@ -162,7 +162,7 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 			},
 		},
 		"!": {
-			hideFailure: true,
+			HideFailure: true,
 			Opt:         []string{"CMD", "..."},
 			Fn: func(w text.Writer, arg []string) (err error) {
 				if len(arg) == 1 {
@@ -174,7 +174,7 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 			},
 		},
 		"_!": {
-			hideFailure: true,
+			HideFailure: true,
 			Fn: func(text.Writer, []string) (err error) {
 				if cl.lastOk {
 					err = errors.New("false")
@@ -183,7 +183,7 @@ func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 			},
 		},
 		"~": {
-			hideFailure: true,
+			HideFailure: true,
 			Arg:         []string{"SUBJECT", "PATTERN", "..."},
 			Fn: func(w text.Writer, arg []string) error {
 				subject := arg[1]
@@ -621,7 +621,7 @@ func (cl *CmdLine) Process() error {
 		}
 		cl.lastOk = err == nil
 		cl.cur.cond.result = nil
-		if cmd.hideFailure {
+		if cmd.HideFailure {
 			err = nil
 		}
 		if privEnv {
