@@ -262,13 +262,36 @@ func (d *decoder) decodeStruct(dest reflect.Value, src Elem) {
 		} else {
 			v := dest.FieldByIndex(f.Index)
 			tag := f.Tag.Get("tidata")
+			// Decide, whether multiple occurences of objects
+			// with the same key will be `combined', i.e. parsed
+			// into a single slice of values of the same type.
+			// This behaviour can be selected using the tag "combine",
+			// and it will be applied on default, if the field
+			// is a slice of structs, that don't implement
+			// a TextUnmarshaler.
+			combine := false
+			isSlice := v.Kind() == reflect.Slice
 			if tag == "combine" {
-				if v.Kind() == reflect.Slice {
-					d.collectItems(v, key, src.Children[i:])
-					seenCombined[key] = true
-					d.postProcess(v, el)
-					continue
+				if !isSlice {
+					panic("combine attr can be used with slice types only")
 				}
+				combine = true
+			} else if isSlice {
+				t := v.Type().Elem()
+				if t.Kind() == reflect.Ptr {
+					t = t.Elem()
+				}
+				var etu encoding.TextUnmarshaler
+				implTU := reflect.PtrTo(t).Implements(reflect.TypeOf(&etu).Elem())
+				if t.Kind() == reflect.Struct && !implTU {
+					combine = true
+				}
+			}
+			if combine {
+				d.collectItems(v, key, src.Children[i:])
+				seenCombined[key] = true
+				d.postProcess(v, el)
+				continue
 			}
 			d.decodeItem(v, el)
 			seen[key] = true
