@@ -403,16 +403,10 @@ retry:
 		sl := reflect.Zero(v.Type())
 		if n := len(el.Children); n > 0 {
 			sl = reflect.MakeSlice(v.Type(), n, n)
-			switch sl.Index(0).Kind() {
-			case reflect.Struct:
-				for i := 0; i < n; i++ {
-					d.decodeStruct(sl.Index(i), el.Children[i])
-				}
-			default:
-				for i := 0; i < n; i++ {
-					c := el.Children[i]
-					d.decodeItem(sl.Index(i), Elem{LineNum: c.LineNum, Text: ".\t" + c.Text, Children: c.Children})
-				}
+
+			for i := 0; i < n; i++ {
+				c := el.Children[i]
+				d.decodeItem(sl.Index(i), Elem{LineNum: c.LineNum, Text: ".\t" + c.Text, Children: c.Children})
 			}
 		} else if s := el.Value(); s != "" {
 			list := rc.Tokenize(s)
