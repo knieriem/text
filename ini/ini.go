@@ -25,6 +25,7 @@ type File struct {
 	overridden string
 	ns         vfs.NameSpace
 	Using      string
+	Label      string
 }
 
 func NewFile(name, short, option string) (f *File) {
@@ -86,8 +87,10 @@ func (f *File) Parse(conf interface{}) (err error) {
 
 	name := f.Name
 	ini := f.short
+	label := ""
 	using := "no " + ini + " file"
 	defer func() {
+		f.Label = label
 		f.Using = "using " + using
 	}()
 	if f.overridden != "" {
@@ -104,11 +107,11 @@ func (f *File) Parse(conf interface{}) (err error) {
 		}
 		using = ini
 		if lb, ok := r.(vfsutil.Label); ok {
-			s := lb.Label()
-			if s == "builtin" {
+			label = lb.Label()
+			if label == "builtin" {
 				using = "builtin " + ini
 			} else {
-				using += " from " + s
+				using += " from " + label
 			}
 		}
 	}
