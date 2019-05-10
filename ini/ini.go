@@ -41,6 +41,10 @@ func BindFS(fs vfs.FileSystem) {
 	ns.Bind("/", fs, "/", vfs.BindBefore)
 }
 
+func BindOS(path, label string) {
+	ns.Bind("/", vfsutil.LabeledOS(path, label), "/", vfs.BindBefore)
+}
+
 func BindHomeLib() {
 	u, err := user.Current()
 	if err != nil || u.HomeDir == "" {
