@@ -106,8 +106,9 @@ func (f *File) Parse(conf interface{}) (err error) {
 			return nil
 		}
 		using = ini
-		if lb, ok := r.(vfsutil.Label); ok {
-			label = lb.Label()
+		if fs, ok := r.(vfsutil.FSInfo); ok {
+			label = fs.Label()
+			name = filepath.Join(fs.Root(), name)
 			if label == "builtin" {
 				using = "builtin " + ini
 			} else {
