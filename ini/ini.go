@@ -123,6 +123,114 @@ func (f *File) Parse(conf interface{}) (err error) {
 	return err
 }
 
+// A DecodeFn parses, and decodes a configuration file and stores it
+// in the value pointed to by v.
+type DecodeFn func(v interface{}) error
+
+// A WalkFn is called for each part that is found by WalkParts. It
+// should call decode to parse the part's contents into the provided
+// variable. WalkFn should return the error returned by decode,
+// or nil.
+type WalkFn func(partName string, decode DecodeFn) error
+
+// WalkParts looks for a file or directory with the given name -- with
+// or without the extension -- within the configured namespace. If it
+// finds a directory, each file within that directory is considered a
+// part, and walkFn is called for it. If WalkParts finds a single
+// file, walkFn is called once instead, the single file treated as one
+// part in this case.
+// This way WalkParts assists parsing configuration, whether it is
+// contained in one part, or split over multiple project files within
+// a directory. How exactly the parts are handled, is left to the
+// caller, who specifies walkFn.
+func WalkParts(name string, walkFn WalkFn) (label string, err error) {
+	fsRoot := ""
+	ext := filepath.Ext(name)
+	stem := name[:len(name)-len(ext)]
+	fi, err := ns.Stat(name)
+	if err != nil {
+		// name does not exist, lookup stem instead
+		fi1, err1 := ns.Stat(stem)
+		if err1 != nil || !fi1.IsDir() {
+			return "", err
+		}
+		if fs, ok := fi1.(vfsutil.FSInfo); ok {
+			label = fs.Label()
+			fsRoot = fs.Root()
+		}
+		name = stem
+		fi = fi1
+	} else if fs, ok := fi.(vfsutil.FSInfo); ok {
+		label = fs.Label()
+		fsRoot = fs.Root()
+		if label == "builtin" {
+			// found a builtin configuration, try to lookup
+			// a non-builtin stem config
+			fi1, err := ns.Stat(stem)
+			if err == nil && fi1.IsDir() {
+				if fs, ok := fi1.(vfsutil.FSInfo); ok {
+					if l1 := fs.Label(); l1 != "builtin" {
+						name = stem
+						fi = fi1
+					}
+				}
+			}
+		}
+	}
+
+	if fi.IsDir() {
+		err = parseDir(fsRoot, name, ext, walkFn)
+	} else {
+		err = parsePart(fsRoot, name, walkFn)
+	}
+	return label, err
+}
+
+func parseDir(fsRoot, dirname, ext string, walkFn WalkFn) error {
+	list, err := ns.ReadDir(dirname)
+	if err != nil {
+		return err
+	}
+	for _, fi := range list {
+		if fi.IsDir() {
+			continue
+		}
+		name := fi.Name()
+		if path.Ext(name) != ext {
+			continue
+		}
+		path := filepath.Join(dirname, name)
+		err := parsePart(fsRoot, path, walkFn)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func parsePart(fsRoot, name string, walkFn WalkFn) error {
+	err := walkFn(filepath.Base(name), func(data interface{}) error {
+		f, err := ns.Open(name)
+		if err != nil {
+			return err
+		}
+		return Parse(f, data)
+	})
+	if err != nil {
+		err = line.ErrInsertFilename(err, filepath.Join(fsRoot, name))
+	}
+	return err
+}
+
+// ParseFile parses a single configuration file that is found in the
+// configured namespace under the given name. A label referring to the
+// file system, where the file was found, is returned.
+func ParseFile(name string, conf interface{}) (fsLabel string, err error) {
+	f := NewFile(name, "", "")
+	err = f.Parse(conf)
+	return f.Label, err
+}
+
 var MultiStringSep string
 
 func Parse(r io.Reader, conf interface{}) (err error) {
