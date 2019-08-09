@@ -1,4 +1,4 @@
-package cmdline
+package interp
 
 import (
 	"bufio"
@@ -88,7 +88,7 @@ func newCmdLineReader(s text.Scanner, c io.Closer) *cmdLineReader {
 	return &cmdLineReader{s, c}
 }
 
-func NewCmdLine(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
+func NewCmdInterp(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
 	cl = new(CmdLine)
 	cl.cmdLineReader = newCmdLineReader(s, nil)
 	cl.cur.lineReader = cl.cmdLineReader
