@@ -28,7 +28,7 @@ const (
 )
 
 type Cmd struct {
-	Map           map[string]Cmd
+	Map           CmdMap
 	Fn            func(_ text.Writer, arg []string) error
 	FnWithContext func(ctx context.Context, _ text.Writer, arg []string) error
 	Arg           []string
@@ -42,6 +42,8 @@ type Cmd struct {
 	HideFailure   bool
 }
 
+type CmdMap map[string]Cmd
+
 type CmdLine struct {
 	*cmdLineReader
 	cur         stackEntry
@@ -52,7 +54,7 @@ type CmdLine struct {
 	envStack    rc.EnvStack
 	tplMap      *templateMap
 
-	cmdMap       map[string]Cmd
+	cmdMap       CmdMap
 	funcMap      map[string]string
 	InitRc       io.ReadCloser
 	ExtraHelp    func()
@@ -88,13 +90,13 @@ func newCmdLineReader(s text.Scanner, c io.Closer) *cmdLineReader {
 	return &cmdLineReader{s, c}
 }
 
-func NewCmdInterp(s text.Scanner, m map[string]Cmd) (cl *CmdLine) {
+func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 	cl = new(CmdLine)
 	cl.cmdLineReader = newCmdLineReader(s, nil)
 	cl.cur.lineReader = cl.cmdLineReader
 	cl.funcMap = make(map[string]string)
 	cl.cmdMap = m
-	builtinCmdMap := map[string]Cmd{
+	builtinCmdMap := CmdMap{
 		".": {
 			Arg: []string{"FILE"},
 			Fn: func(w text.Writer, arg []string) (err error) {
@@ -756,7 +758,7 @@ func (cl *CmdLine) repeatCmd(w text.Writer, arg []string) (err error) {
 }
 
 func (cl *CmdLine) help(w io.Writer, args []string) {
-	outmap := make(map[string]map[string]Cmd, 8)
+	outmap := make(map[string]CmdMap, 8)
 	hasWritten := false
 	cmdName := ""
 	iDot := -1
@@ -813,7 +815,7 @@ retry:
 		}
 		gm, ok := outmap[group]
 		if !ok {
-			gm = make(map[string]Cmd, 8)
+			gm = make(CmdMap, 8)
 			outmap[group] = gm
 		}
 		gm[name] = v
