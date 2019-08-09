@@ -28,21 +28,36 @@ const (
 )
 
 type Cmd struct {
-	Map           CmdMap
-	Fn            func(_ text.Writer, arg []string) error
-	FnWithContext func(ctx context.Context, _ text.Writer, arg []string) error
-	Arg           []string
-	Opt           []string
-	Help          string
-	Hidden        bool
-	Group         string
-	Flags         string
-	InitFlags     func(f *flag.FlagSet)
-	ignoreEnv     bool
-	HideFailure   bool
+	Map         CmdMap
+	Fn          func(_ Context, arg []string) error
+	Arg         []string
+	Opt         []string
+	Help        string
+	Hidden      bool
+	Group       string
+	Flags       string
+	InitFlags   func(f *flag.FlagSet)
+	ignoreEnv   bool
+	HideFailure bool
 }
 
 type CmdMap map[string]Cmd
+
+type Context interface {
+	text.Writer
+	context.Context
+	Getenv(string) string
+}
+
+type icontext struct {
+	text.Writer
+	context.Context
+	getenv func(string) string
+}
+
+func (ictx *icontext) Getenv(s string) string {
+	return ictx.getenv(s)
+}
 
 type CmdLine struct {
 	*cmdLineReader
@@ -69,7 +84,7 @@ type CmdLine struct {
 	FnWrongNArg  func(string)
 	Open         func(filename string) (io.ReadCloser, error)
 
-	cIntr         chan int
+	cIntr         chan struct{}
 	exitFlag      bool
 	OpenRedirFile func(name string, flag int, perm os.FileMode) (RedirFile, error)
 	redirFileMap  map[string]RedirFile
@@ -99,7 +114,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 	builtinCmdMap := CmdMap{
 		".": {
 			Arg: []string{"FILE"},
-			Fn: func(w text.Writer, arg []string) (err error) {
+			Fn: func(w Context, arg []string) (err error) {
 				f, err := cl.Open(arg[1])
 				if err == nil {
 					cl.pushStack(f, nil, nil, w)
@@ -111,7 +126,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 		},
 		"echo": {
 			Opt: []string{"ARG", "..."},
-			Fn: func(w text.Writer, arg []string) (err error) {
+			Fn: func(w Context, arg []string) (err error) {
 				arg2 := make([]string, 0, len(arg))
 				for _, a := range arg[1:] {
 					if a != "" {
@@ -125,7 +140,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 		},
 		"if": {
 			Arg: []string{"CMD", "..."},
-			Fn: func(w text.Writer, arg []string) (err error) {
+			Fn: func(w Context, arg []string) (err error) {
 				cmd, err := cl.ParseCmd(arg[len(arg)-1:])
 				if err != nil {
 					return
@@ -148,7 +163,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 		},
 		"_testcond": {
 			Hidden: true,
-			Fn: func(w text.Writer, _ []string) (err error) {
+			Fn: func(w Context, _ []string) (err error) {
 				cond := &cl.cur.cond
 				cmd := cond.cmd
 				if cmd == "" {
@@ -166,7 +181,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 		"!": {
 			HideFailure: true,
 			Opt:         []string{"CMD", "..."},
-			Fn: func(w text.Writer, arg []string) (err error) {
+			Fn: func(w Context, arg []string) (err error) {
 				if len(arg) == 1 {
 					return errors.New("false")
 				}
@@ -177,7 +192,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 		},
 		"_!": {
 			HideFailure: true,
-			Fn: func(text.Writer, []string) (err error) {
+			Fn: func(Context, []string) (err error) {
 				if cl.lastOk {
 					err = errors.New("false")
 				}
@@ -187,7 +202,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 		"~": {
 			HideFailure: true,
 			Arg:         []string{"SUBJECT", "PATTERN", "..."},
-			Fn: func(w text.Writer, arg []string) error {
+			Fn: func(w Context, arg []string) error {
 				subject := arg[1]
 				for _, pat := range arg[2:] {
 					match, err := path.Match(pat, subject)
@@ -204,7 +219,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 		},
 		"fn": {
 			Opt: []string{"NAME", "CMD", "..."},
-			Fn: func(w text.Writer, arg []string) error {
+			Fn: func(w Context, arg []string) error {
 				switch len(arg) {
 				case 1:
 					for name := range cl.funcMap {
@@ -226,7 +241,7 @@ a single command, or a block enclosed in '{' and '}':
 		},
 		"unbind": {
 			Arg: []string{"NAME"},
-			Fn: func(_ text.Writer, arg []string) (err error) {
+			Fn: func(_ Context, arg []string) (err error) {
 				if _, ok := cl.funcMap[arg[1]]; !ok {
 					err = errors.New("function not found")
 					return
@@ -239,13 +254,13 @@ a single command, or a block enclosed in '{' and '}':
 		"repeat": {
 			Arg: []string{"{N|T}", "CMD"},
 			Opt: []string{"ARG", "..."},
-			Fn: func(w text.Writer, arg []string) error {
+			Fn: func(w Context, arg []string) error {
 				return cl.repeatCmd(w, arg[1:])
 			},
 			Help: "Repeat a command N times, or for a specified duration T.",
 		},
 		"sleep": {
-			Fn: func(_ text.Writer, arg []string) (err error) {
+			Fn: func(ctx Context, arg []string) (err error) {
 				tArg, err := time.ParseDuration(arg[1])
 				if err != nil {
 					return
@@ -253,7 +268,7 @@ a single command, or a block enclosed in '{' and '}':
 				t := time.NewTimer(tArg)
 				select {
 				case <-t.C:
-				case <-cl.cIntr:
+				case <-ctx.Done():
 					t.Stop()
 					err = ErrInterrupt
 				}
@@ -263,7 +278,7 @@ a single command, or a block enclosed in '{' and '}':
 			Help: "Sleep for the specified duration.",
 		},
 		"exit": {
-			Fn: func(text.Writer, []string) error {
+			Fn: func(Context, []string) error {
 				cl.exitFlag = true
 				return nil
 			},
@@ -299,7 +314,7 @@ a single command, or a block enclosed in '{' and '}':
 	cl.FnWrongNArg = func(cmd string) {
 		cl.Errf("%s: wrong number of arguments\n", cmd)
 	}
-	cl.cIntr = make(chan int, 0)
+	cl.cIntr = make(chan struct{}, 0)
 	cl.tok = new(rc.Tokenizer)
 	cl.envStack.Push(rc.EnvMap{
 		"prefix": []string{"\t"},
@@ -358,7 +373,7 @@ func (cl *CmdLine) Interrupt(timeout time.Duration, intrC chan<- error) (ok bool
 	select {
 	case <-t.C:
 		return
-	case cl.cIntr <- 1:
+	case cl.cIntr <- struct{}{}:
 	case intrC <- ErrInterrupt:
 	}
 	t.Stop()
@@ -436,7 +451,8 @@ func (cl *CmdLine) Process() error {
 	if cl.InitRc != nil {
 		cl.pushStack(cl.InitRc, nil, nil, cl.cur.w)
 	}
-	//processLoop:
+
+	var ictx *icontext
 	for {
 		if cl.Prompt != "" {
 			fmt.Fprintf(cl.ConsoleOut, "%s", cl.Prompt)
@@ -446,9 +462,20 @@ func (cl *CmdLine) Process() error {
 		}()
 		scanOk := false
 	selAgain:
+		if ictx == nil {
+			ctx := context.Background()
+			ctx, cancel := context.WithCancel(ctx)
+			go func() {
+				<-cl.cIntr
+				cancel()
+			}()
+			ictx = new(icontext)
+			ictx.Context = ctx
+			ictx.getenv = cl.Getenv
+		}
 		select {
-		case scanOk = <-ready:
-		case <-cl.cIntr:
+		case <-ictx.Done():
+			ictx = nil
 			if len(cl.inputStack) == 0 {
 				return ErrInterrupt
 			} else {
@@ -459,7 +486,24 @@ func (cl *CmdLine) Process() error {
 				}
 				goto selAgain
 			}
+		default:
 		}
+		select {
+		case <-ictx.Done():
+			ictx = nil
+			if len(cl.inputStack) == 0 {
+				return ErrInterrupt
+			} else {
+				cl.Errf("%v\n", ErrInterrupt)
+				cl.popStackAll()
+				if cl.Prompt != "" {
+					fmt.Fprintf(cl.ConsoleOut, "%s", cl.Prompt)
+				}
+				goto selAgain
+			}
+		case scanOk = <-ready:
+		}
+
 		if !scanOk {
 			err := cl.Err()
 			if err == nil {
@@ -604,22 +648,15 @@ func (cl *CmdLine) Process() error {
 				cl.envStack.Push(c.Assignments)
 			}
 		}
-		if cmd.FnWithContext != nil {
-			ctx := context.Background()
-			ctx, cancel := context.WithCancel(ctx)
-			chOk := make(chan struct{})
-			go func() {
-				select {
-				case <-cl.cIntr:
-					cancel()
-				case <-chOk:
-					return
-				}
-			}()
-			err = cmd.FnWithContext(ctx, w, args)
-			close(chOk)
-		} else {
-			err = cmd.Fn(w, args) // run it
+		ictx.Writer = w
+		err = cmd.Fn(ictx, args)
+		select {
+		case <-ictx.Done():
+			if err == nil {
+				err = ErrInterrupt
+			}
+			ictx = nil
+		default:
 		}
 		cl.lastOk = err == nil
 		cl.cur.cond.result = nil
