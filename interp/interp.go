@@ -41,7 +41,7 @@ type Cmd struct {
 	HideFailure bool
 }
 
-type CmdMap map[string]Cmd
+type CmdMap map[string]*Cmd
 
 type Context interface {
 	text.Writer
@@ -287,7 +287,7 @@ a single command, or a block enclosed in '{' and '}':
 		},
 	}
 	if _, ok := m["builtin"]; !ok {
-		m["builtin"] = Cmd{
+		m["builtin"] = &Cmd{
 			Map:  builtinCmdMap,
 			Help: "Built-in commands.\nMay be called without the `builtin.' prefix.",
 		}
