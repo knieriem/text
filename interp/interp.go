@@ -114,10 +114,10 @@ func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 	builtinCmdMap := CmdMap{
 		".": {
 			Arg: []string{"FILE"},
-			Fn: func(w Context, arg []string) (err error) {
+			Fn: func(ctx Context, arg []string) (err error) {
 				f, err := cl.Open(arg[1])
 				if err == nil {
-					cl.pushStack(f, nil, nil, w)
+					cl.pushStack(f, nil, nil, extractWriter(ctx))
 				}
 				return
 			},
@@ -140,11 +140,12 @@ func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 		},
 		"if": {
 			Arg: []string{"CMD", "..."},
-			Fn: func(w Context, arg []string) (err error) {
+			Fn: func(ctx Context, arg []string) (err error) {
 				cmd, err := cl.ParseCmd(arg[len(arg)-1:])
 				if err != nil {
 					return
 				}
+				w := extractWriter(ctx)
 				if arg[1] == "not" {
 					if cl.cur.cond.result == nil {
 						err = errors.New("`if not' does not follow `if'")
@@ -163,7 +164,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 		},
 		"_testcond": {
 			Hidden: true,
-			Fn: func(w Context, _ []string) (err error) {
+			Fn: func(ctx Context, _ []string) (err error) {
 				cond := &cl.cur.cond
 				cmd := cond.cmd
 				if cmd == "" {
@@ -173,7 +174,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 				ok := cl.lastOk
 				cl.inputStack[len(cl.inputStack)-1].cond.result = &ok
 				if ok {
-					cl.pushStringStack(cmd, w)
+					cl.pushStringStack(cmd, extractWriter(ctx))
 				}
 				return nil
 			},
@@ -181,12 +182,12 @@ func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 		"!": {
 			HideFailure: true,
 			Opt:         []string{"CMD", "..."},
-			Fn: func(w Context, arg []string) (err error) {
+			Fn: func(ctx Context, arg []string) (err error) {
 				if len(arg) == 1 {
 					return errors.New("false")
 				}
 				cmd := rc.Join(arg[1:]) + "\n" + "_!\n"
-				cl.pushStringStack(cmd, w)
+				cl.pushStringStack(cmd, extractWriter(ctx))
 				return nil
 			},
 		},
@@ -254,8 +255,8 @@ a single command, or a block enclosed in '{' and '}':
 		"repeat": {
 			Arg: []string{"{N|T}", "CMD"},
 			Opt: []string{"ARG", "..."},
-			Fn: func(w Context, arg []string) error {
-				return cl.repeatCmd(w, arg[1:])
+			Fn: func(ctx Context, arg []string) error {
+				return cl.repeatCmd(extractWriter(ctx), arg[1:])
 			},
 			Help: "Repeat a command N times, or for a specified duration T.",
 		},
@@ -326,6 +327,10 @@ a single command, or a block enclosed in '{' and '}':
 	}
 	cl.lastOk = true
 	return cl
+}
+
+func extractWriter(ctx Context) text.Writer {
+	return ctx.(*icontext).Writer
 }
 
 func (cl *CmdLine) cleanup() {
