@@ -75,7 +75,7 @@ type CmdLine struct {
 	ExtraHelp    func()
 	DefaultGroup string
 	Prompt       string
-	ConsoleOut   io.Writer
+	WritePrompt  func(string) error
 	Stdout       io.Writer
 	Forward      io.Writer
 	Errf         func(format string, v ...interface{})
@@ -305,6 +305,13 @@ a single command, or a block enclosed in '{' and '}':
 	cl.OpenRedirFile = func(name string, flag int, perm os.FileMode) (RedirFile, error) {
 		return os.OpenFile(name, flag, perm)
 	}
+	cl.WritePrompt = func(prompt string) error {
+		if prompt == "" {
+			return nil
+		}
+		_, err := cl.Stdout.Write([]byte(prompt))
+		return err
+	}
 	cl.Errf = func(string, ...interface{}) {}
 	cl.FnNotFound = func(cmd string) {
 		cl.Errf("%s: no such command\n", cmd)
@@ -459,9 +466,7 @@ func (cl *CmdLine) Process() error {
 
 	var ictx *icontext
 	for {
-		if cl.Prompt != "" {
-			fmt.Fprintf(cl.ConsoleOut, "%s", cl.Prompt)
-		}
+		cl.WritePrompt(cl.Prompt)
 		go func() {
 			ready <- cl.Scan()
 		}()
@@ -486,9 +491,7 @@ func (cl *CmdLine) Process() error {
 			} else {
 				cl.Errf("%v\n", ErrInterrupt)
 				cl.popStackAll()
-				if cl.Prompt != "" {
-					fmt.Fprintf(cl.ConsoleOut, "%s", cl.Prompt)
-				}
+				cl.WritePrompt(cl.Prompt)
 				goto selAgain
 			}
 		default:
@@ -501,9 +504,7 @@ func (cl *CmdLine) Process() error {
 			} else {
 				cl.Errf("%v\n", ErrInterrupt)
 				cl.popStackAll()
-				if cl.Prompt != "" {
-					fmt.Fprintf(cl.ConsoleOut, "%s", cl.Prompt)
-				}
+				cl.WritePrompt(cl.Prompt)
 				goto selAgain
 			}
 		case scanOk = <-ready:
@@ -698,6 +699,7 @@ func (cl *CmdLine) LastOK() bool {
 
 func (cl *CmdLine) scanBlock() (block string, err error) {
 	for {
+		cl.WritePrompt("")
 		if !cl.Scan() {
 			err = cl.Err()
 			if err == nil {
