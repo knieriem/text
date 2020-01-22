@@ -27,12 +27,13 @@ func (e *Elem) pfxString(pfx string) string {
 	return s
 }
 
-func (e *Elem) joinAllChildren(indent, sep string) string {
+func (e *Elem) JoinSubElems(initialIndent, indent, sep string) string {
 	val := ""
+	prefix := initialIndent
 	for i := range e.Children {
 		c := &e.Children[i]
-		val += indent + c.Text + sep
-		val += c.joinAllChildren(indent+"\t", sep)
+		val += prefix + c.Text + sep
+		val += c.JoinSubElems(prefix+indent, indent, sep)
 	}
 	return val
 }
