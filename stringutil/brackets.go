@@ -1,6 +1,6 @@
 package stringutil
 
-// FindOpeningParen performs a backward search on the string
+// FindOpeningBracket performs a backward search on the string
 // argument for a matching bracket, provided that closingBracketIndex
 // points to the closing bracket.
 // The function recognizes nested brackets; it returns -1 if no matching
