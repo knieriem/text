@@ -146,7 +146,7 @@ type WalkFn func(partName string, decode DecodeFn) error
 // caller, who specifies walkFn.
 func WalkParts(name string, walkFn WalkFn) (label string, err error) {
 	fsRoot := ""
-	ext := filepath.Ext(name)
+	ext := path.Ext(name)
 	stem := name[:len(name)-len(ext)]
 	fi, err := ns.Stat(name)
 	if err != nil {
@@ -200,7 +200,7 @@ func parseDir(fsRoot, dirname, ext string, walkFn WalkFn) error {
 		if path.Ext(name) != ext {
 			continue
 		}
-		path := filepath.Join(dirname, name)
+		path := path.Join(dirname, name)
 		err := parsePart(fsRoot, path, walkFn)
 		if err != nil {
 			return err
@@ -210,7 +210,7 @@ func parseDir(fsRoot, dirname, ext string, walkFn WalkFn) error {
 }
 
 func parsePart(fsRoot, name string, walkFn WalkFn) error {
-	err := walkFn(filepath.Base(name), func(data interface{}) error {
+	err := walkFn(path.Base(name), func(data interface{}) error {
 		f, err := ns.Open(name)
 		if err != nil {
 			return err
