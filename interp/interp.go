@@ -193,6 +193,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 			},
 		},
 		"_!": {
+			Hidden:      true,
 			HideFailure: true,
 			Fn: func(Context, []string) (err error) {
 				if cl.lastOk {
