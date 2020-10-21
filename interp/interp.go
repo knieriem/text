@@ -70,6 +70,7 @@ type CmdLine struct {
 	tplMap      *templateMap
 
 	cmdMap       CmdMap
+	builtin      CmdMap
 	funcMap      map[string]string
 	InitRc       io.ReadCloser
 	ExtraHelp    func()
@@ -111,7 +112,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
 	cl.cur.lineReader = cl.cmdLineReader
 	cl.funcMap = make(map[string]string)
 	cl.cmdMap = m
-	builtinCmdMap := CmdMap{
+	cl.builtin = CmdMap{
 		".": {
 			Arg: []string{"FILE"},
 			Fn: func(ctx Context, arg []string) (err error) {
@@ -288,14 +289,8 @@ a single command, or a block enclosed in '{' and '}':
 	}
 	if _, ok := m["builtin"]; !ok {
 		m["builtin"] = &Cmd{
-			Map:  builtinCmdMap,
+			Map:  cl.builtin,
 			Help: "Built-in commands.\nMay be called without the `builtin.' prefix.",
-		}
-	}
-	for name, cmd := range builtinCmdMap {
-		if _, ok := m[name]; !ok {
-			cmd.Hidden = true
-			m[name] = cmd
 		}
 	}
 
@@ -589,16 +584,21 @@ func (cl *CmdLine) Process() error {
 		}
 
 		m := cl.cmdMap
+		isRoot := true
 		cmdName := name
 
 	retry:
 		cmd, ok := m[cmdName]
+		if !ok && isRoot {
+			cmd, ok = cl.builtin[cmdName]
+		}
 		if !ok {
 			if iDot := strings.Index(cmdName, "."); iDot != -1 {
 				if cmd, ok = m[cmdName[:iDot]]; ok {
 					m = cmd.Map
 					if m != nil {
 						cmdName = cmdName[iDot+1:]
+						isRoot = false
 						goto retry
 					}
 				}
