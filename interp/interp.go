@@ -66,7 +66,7 @@ type CmdLine struct {
 	lastOk      bool
 	savedPrompt string
 	tok         *rc.Tokenizer
-	envStack    rc.EnvStack
+	env         *Env
 	tplMap      *templateMap
 
 	cmdMap       CmdMap
@@ -106,7 +106,41 @@ func newCmdLineReader(s text.Scanner, c io.Closer) *cmdLineReader {
 	return &cmdLineReader{s, c}
 }
 
-func NewCmdInterp(s text.Scanner, m CmdMap) (cl *CmdLine) {
+type Option func(cl *CmdLine)
+
+func WithEnv(e *Env) Option {
+	return func(cl *CmdLine) {
+		cl.env = e
+	}
+}
+
+type Env struct {
+	stack rc.EnvStack
+}
+
+func NewEnv() *Env {
+	env := new(Env)
+	env.stack.Push(rc.EnvMap{
+		"prefix": []string{"\t"},
+		"OFS":    []string{" "},
+		"*":      []string{"rc"},
+	})
+	return env
+}
+
+func (env *Env) Getenv(name string) string {
+	list := env.stack.Get(name)
+	if len(list) != 0 {
+		return list[0]
+	}
+	return ""
+}
+
+func (env *Env) Setenv(name, value string) {
+	env.stack.Set(name, []string{value})
+}
+
+func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
 	cl = new(CmdLine)
 	cl.cmdLineReader = newCmdLineReader(s, nil)
 	cl.cur.lineReader = cl.cmdLineReader
@@ -320,13 +354,15 @@ a single command, or a block enclosed in '{' and '}':
 	}
 	cl.cIntr = make(chan struct{}, 0)
 	cl.tok = new(rc.Tokenizer)
-	cl.envStack.Push(rc.EnvMap{
-		"prefix": []string{"\t"},
-		"OFS":    []string{" "},
-		"*":      []string{"rc"},
-	})
+
+	for _, option := range opts {
+		option(cl)
+	}
+	if cl.env == nil {
+		cl.env = NewEnv()
+	}
 	cl.tok.Getenv = func(key string) []string {
-		return cl.envStack.Get(key)
+		return cl.env.stack.Get(key)
 	}
 	cl.lastOk = true
 	return cl
@@ -423,10 +459,10 @@ func (cl *CmdLine) pushStringStack(cmds string, w text.Writer) {
 
 func (cl *CmdLine) popStack() {
 	if cl.cur.popEnv {
-		cl.envStack.Pop()
+		cl.env.stack.Pop()
 	}
 	if a := cl.cur.savedArgs; a != nil {
-		cl.envStack.Set("*", a)
+		cl.env.stack.Set("*", a)
 	}
 	sz := len(cl.inputStack)
 	sz--
@@ -477,7 +513,7 @@ func (cl *CmdLine) Process() error {
 			}()
 			ictx = new(icontext)
 			ictx.Context = ctx
-			ictx.getenv = cl.Getenv
+			ictx.getenv = cl.env.Getenv
 		}
 		select {
 		case <-ictx.Done():
@@ -548,7 +584,7 @@ func (cl *CmdLine) Process() error {
 		args := c.Fields
 		if len(args) == 0 {
 			if a := c.Assignments; len(a) != 0 {
-				cl.envStack.Insert(a)
+				cl.env.stack.Insert(a)
 				continue
 			}
 			if cl.Forward != nil {
@@ -564,16 +600,16 @@ func (cl *CmdLine) Process() error {
 		name := args[0]
 		if body, ok := cl.funcMap[name]; ok {
 			if privEnv {
-				cl.envStack.Push(c.Assignments)
+				cl.env.stack.Push(c.Assignments)
 			}
 			cl.pushStringStack(body, w)
 			if privEnv {
 				cl.cur.popEnv = true
 			} else {
-				cl.cur.savedArgs = cl.envStack.Get("*")
+				cl.cur.savedArgs = cl.env.stack.Get("*")
 			}
 			args[0] = ""
-			cl.envStack.Set("*", args)
+			cl.env.stack.Set("*", args)
 			continue
 		}
 		if name == "help" {
@@ -652,7 +688,7 @@ func (cl *CmdLine) Process() error {
 		}
 		if privEnv {
 			if !cmd.ignoreEnv {
-				cl.envStack.Push(c.Assignments)
+				cl.env.stack.Push(c.Assignments)
 			}
 		}
 		ictx.Writer = w
@@ -671,7 +707,7 @@ func (cl *CmdLine) Process() error {
 			err = nil
 		}
 		if privEnv {
-			cl.envStack.Pop()
+			cl.env.stack.Pop()
 		}
 		if err != nil {
 			cl.FnFailed(name, err)
@@ -923,18 +959,6 @@ func argString(pfx string, args []string, sfx string) string {
 	return pfx + strings.Join(args, " ") + sfx
 }
 
-func (cl *CmdLine) Getenv(name string) string {
-	list := cl.envStack.Get(name)
-	if len(list) != 0 {
-		return list[0]
-	}
-	return ""
-}
-
-func (cl *CmdLine) Setenv(name, value string) {
-	cl.envStack.Set(name, []string{value})
-}
-
 type writer struct {
 	io.Writer
 	fieldSep func() string
@@ -944,7 +968,7 @@ type writer struct {
 func (cl *CmdLine) newWriter(w io.Writer) *writer {
 	var b bytes.Buffer
 	get := func(name string) string {
-		q := cl.Getenv(name)
+		q := cl.env.Getenv(name)
 		q = strings.Replace(q, `"`, `\"`, -1)
 		s, err := strconv.Unquote(`"` + q + `"`)
 		if err != nil {
