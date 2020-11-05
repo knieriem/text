@@ -731,10 +731,11 @@ func (cl *CmdLine) Process() error {
 			cl.env.stack.Pop()
 		}
 		if err != nil {
-			cl.FnFailed(name, err)
-			if err == ErrInterrupt {
+			if errors.Is(err, context.Canceled) || err == ErrInterrupt {
+				err = ErrInterrupt
 				cl.popStackAll()
 			}
+			cl.FnFailed(name, err)
 		}
 		if cl.exitFlag {
 			break
