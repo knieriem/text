@@ -188,6 +188,19 @@ func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
 			},
 			Help: "Print arguments.",
 		},
+		"cat": {
+			Arg: []string{"FILE"},
+			Fn: func(w Context, arg []string) (err error) {
+				f, err := cl.Open(arg[1])
+				if err != nil {
+					return err
+				}
+				_, err = io.Copy(w, f)
+				f.Close()
+				return err
+			},
+			Help: "Print the contents of FILE.",
+		},
 		"if": {
 			Arg: []string{"CMD", "..."},
 			Fn: func(ctx Context, arg []string) (err error) {
