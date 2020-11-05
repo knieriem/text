@@ -1076,7 +1076,7 @@ func (cl *CmdLine) newWriter(w io.Writer) *writer {
 			return get("OFS")
 		},
 		prefix: func() string {
-			t, err := cl.tplMap.Get(get("prefix"))
+			t, err := cl.tplMap.Get("$prefix", get("prefix"))
 			if err != nil {
 				return err.Error()
 			}
@@ -1118,12 +1118,12 @@ func newTemplateMap(nMax int) *templateMap {
 	}
 }
 
-func (tm *templateMap) Get(s string) (*template.Template, error) {
-	t, ok := tm.m[s]
+func (tm *templateMap) Get(name, def string) (*template.Template, error) {
+	t, ok := tm.m[def]
 	if ok {
 		return t, nil
 	}
-	t = template.New("")
+	t = template.New(name)
 	t.Funcs(template.FuncMap{
 		"div": func(dividend, divisor int64) int64 {
 			return dividend / divisor
@@ -1135,10 +1135,10 @@ func (tm *templateMap) Get(s string) (*template.Template, error) {
 			return tm.t0
 		},
 	})
-	t, err := t.Parse(s)
+	t, err := t.Parse(def)
 	if err != nil {
 		return nil, err
 	}
-	tm.m[s] = t
+	tm.m[def] = t
 	return t, nil
 }
