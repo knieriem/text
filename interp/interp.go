@@ -84,6 +84,7 @@ type CmdLine struct {
 	FnFailed     func(string, error)
 	FnWrongNArg  func(string)
 	Open         func(filename string) (io.ReadCloser, error)
+	cmdHook      CmdHookFunc
 
 	cIntr         chan struct{}
 	exitFlag      bool
@@ -138,6 +139,20 @@ func (env *Env) Getenv(name string) string {
 
 func (env *Env) Setenv(name, value string) {
 	env.stack.Set(name, []string{value})
+}
+
+type CmdHookFunc func(Context)
+
+// WithCmdHook registers a function that is called each time
+// before a command is called. The context value in the first
+// function argument of the hook function is the same the
+// command will see. The command hook might be used, for example,
+// to configure a service underlying multiple commands in cases
+// where doing it different is not easily possible.
+func WithCmdHook(f CmdHookFunc) Option {
+	return func(cl *CmdLine) {
+		cl.cmdHook = f
+	}
 }
 
 func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
@@ -692,6 +707,9 @@ func (cl *CmdLine) Process() error {
 			}
 		}
 		ictx.Writer = w
+		if cl.cmdHook != nil {
+			cl.cmdHook(ictx)
+		}
 		err = cmd.Fn(ictx, args)
 		select {
 		case <-ictx.Done():
