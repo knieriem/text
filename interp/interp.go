@@ -427,13 +427,12 @@ opened:
 	return w, nil
 }
 
-func (cl *CmdLine) Interrupt(timeout time.Duration, intrC chan<- error) (ok bool) {
+func (cl *CmdLine) Interrupt(timeout time.Duration) (ok bool) {
 	t := time.NewTimer(timeout)
 	select {
 	case <-t.C:
 		return
 	case cl.cIntr <- struct{}{}:
-	case intrC <- ErrInterrupt:
 	}
 	t.Stop()
 	ok = true
