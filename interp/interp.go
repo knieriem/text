@@ -496,6 +496,7 @@ func (cl *CmdLine) popStackAll() {
 }
 
 var ErrInterrupt = errors.New("interrupted")
+var ErrLastCmdFailed = errors.New("last command failed")
 
 func (cl *CmdLine) Process() error {
 	var line string
@@ -568,6 +569,9 @@ func (cl *CmdLine) Process() error {
 					}
 					cl.popStack()
 					continue
+				}
+				if !cl.lastOk {
+					err = ErrLastCmdFailed
 				}
 			}
 			return err
@@ -745,10 +749,6 @@ func (cl *CmdLine) fwd(line []byte) {
 		cl.Errf("forwarding write failed: %v\n", err)
 	}
 
-}
-
-func (cl *CmdLine) LastOK() bool {
-	return cl.lastOk
 }
 
 func (cl *CmdLine) scanBlock() (block string, err error) {
