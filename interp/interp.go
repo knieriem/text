@@ -1078,10 +1078,13 @@ func (cl *CmdLine) newWriter(w io.Writer) *writer {
 		prefix: func() string {
 			t, err := cl.tplMap.Get("$prefix", get("prefix"))
 			if err != nil {
-				return err.Error()
+				return "<" + err.Error() + ">"
 			}
 			b.Reset()
-			t.Execute(&b, nil)
+			err = t.Execute(&b, nil)
+			if err != nil {
+				return "<" + err.Error() + ">"
+			}
 			return b.String()
 		},
 	}
