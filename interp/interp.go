@@ -39,6 +39,7 @@ type Cmd struct {
 	InitFlags   func(f *flag.FlagSet)
 	ignoreEnv   bool
 	HideFailure bool
+	weakStatus  bool
 }
 
 type CmdMap map[string]*Cmd
@@ -324,6 +325,27 @@ a single command, or a block enclosed in '{' and '}':
 			},
 			Help: "Repeat a command N times, or for a specified duration T.",
 		},
+		"return": {
+			Fn: func(_ Context, _ []string) error {
+				return cl.returnFromFunc()
+			},
+			weakStatus: true,
+			Help:       "exit the current loop",
+		},
+		"break": {
+			Fn: func(_ Context, _ []string) error {
+				return cl.breakLoop()
+			},
+			weakStatus: true,
+			Help:       "exit the current loop",
+		},
+		"false": {
+			Fn: func(_ Context, _ []string) error {
+				return errors.New("false")
+			},
+			HideFailure: true,
+			Help:        "return an exit status indicating failure",
+		},
 		"sleep": {
 			Fn: func(ctx Context, arg []string) (err error) {
 				tArg, err := time.ParseDuration(arg[1])
@@ -459,10 +481,15 @@ type stackEntry struct {
 	w          text.Writer
 	popEnv     bool
 	savedArgs  []string
+	isFunc     bool
 	cond       struct {
 		cmd    string
 		result *bool
 	}
+}
+
+func (stk *stackEntry) isLoop() bool {
+	return stk.repetition != nil
 }
 
 func (cl *CmdLine) pushStack(rc io.ReadCloser, rpt *repetition, rewind func() io.ReadCloser, w text.Writer) {
@@ -504,6 +531,39 @@ func (cl *CmdLine) popStack() {
 
 func (cl *CmdLine) popStackAll() {
 	for len(cl.inputStack) > 0 {
+		cl.popStack()
+	}
+}
+
+func (cl *CmdLine) breakLoop() error {
+	isLoop := cl.cur.isLoop()
+	for {
+		if len(cl.inputStack) == 0 || cl.cur.isFunc {
+			if !isLoop {
+				if cl.cur.isFunc {
+					cl.popStackAll()
+				}
+				return errors.New("not within a loop")
+			}
+			return nil
+		}
+		cl.popStack()
+		if isLoop {
+			return nil
+		}
+		isLoop = cl.cur.isLoop()
+	}
+}
+
+func (cl *CmdLine) returnFromFunc() error {
+	for {
+		if cl.cur.isFunc {
+			cl.popStack()
+			return nil
+		}
+		if len(cl.inputStack) == 0 {
+			return errors.New("not within a function")
+		}
 		cl.popStack()
 	}
 }
@@ -641,6 +701,7 @@ func (cl *CmdLine) Process() error {
 			}
 			args[0] = ""
 			cl.env.stack.Set("*", args)
+			cl.cur.isFunc = true
 			continue
 		}
 		if name == "help" {
@@ -735,7 +796,9 @@ func (cl *CmdLine) Process() error {
 			ictx = nil
 		default:
 		}
-		cl.lastOk = err == nil
+		if !cmd.weakStatus {
+			cl.lastOk = err == nil
+		}
 		cl.cur.cond.result = nil
 		if cmd.HideFailure {
 			err = nil
