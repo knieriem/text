@@ -220,7 +220,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
 					}
 					return
 				}
-				cond := rc.Join(arg[1:len(arg)-1]) + "\n" + "_testcond\n"
+				cond := rc.JoinCmd(arg[1:len(arg)-1]) + "\n" + "_testcond\n"
 				cl.pushStringStack(cond, w)
 				cl.cur.cond.cmd = cmd
 				return nil
@@ -250,7 +250,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
 				if len(arg) == 1 {
 					return errors.New("false")
 				}
-				cmd := rc.Join(arg[1:]) + "\n" + "_!\n"
+				cmd := rc.JoinCmd(arg[1:]) + "\n" + "_!\n"
 				cl.pushStringStack(cmd, extractWriter(ctx))
 				return nil
 			},
@@ -733,7 +733,7 @@ func (cl *CmdLine) Process() error {
 				}
 			}
 			if cl.Forward != nil {
-				cl.fwd([]byte(rc.Join(args) + "\n"))
+				cl.fwd([]byte(rc.JoinCmd(args) + "\n"))
 			} else {
 				cl.FnNotFound(name)
 				cl.lastOk = false
@@ -871,7 +871,7 @@ func (cl *CmdLine) parseFunc(name string, args []string) (err error) {
 
 func (cl *CmdLine) ParseCmd(f []string) (cmd string, err error) {
 	if f[0] != "{" {
-		cmd = "\t" + rc.Join(f) + "\n"
+		cmd = "\t" + rc.JoinCmd(f) + "\n"
 		return
 	}
 	cmd, err = cl.scanBlock()
