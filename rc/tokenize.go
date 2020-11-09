@@ -352,20 +352,20 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 			}
 			flushToken(i)
 			i0++
-		case '=':
-			if seenAssign {
-				err = tokenSyntaxErr(r)
-				return
-			}
-			seenAssign = true
-			flushToken(i)
-			a := new(assignmentToken)
-			a.name = field
-			field = nil
-			t = a
 		case '#':
 			addField(i)
 			return
+		case '=':
+			if _, ok := t.(*assignmentToken); !ok {
+				seenAssign = true
+				flushToken(i)
+				a := new(assignmentToken)
+				a.name = field
+				field = nil
+				t = a
+				break
+			}
+			// fallthrough
 		default:
 			if _, ok := t.(*varRefToken); ok {
 				if !unicode.IsLetter(r) && r != '_' && !unicode.IsDigit(r) && r != '*' && r != '(' && r != ')' {

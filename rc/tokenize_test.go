@@ -82,8 +82,13 @@ var tokenizeCmdTests = []testSpec{
 			"$a", "squirrel", "eats", "a", "hazelnut",
 		},
 	}, {
-		input:    "a=b=c foo",
-		mustFail: true,
+		input: "a=b=c foo",
+		fields: []string{
+			"foo",
+		},
+		assignments: EnvMap{
+			"a": {"b=c"},
+		},
 	}, {
 		input:    "^a",
 		mustFail: true,
