@@ -123,7 +123,7 @@ type Env struct {
 func NewEnv() *Env {
 	env := new(Env)
 	env.stack.Push(rc.EnvMap{
-		"prefix": []string{"\t"},
+		"prefix": nil,
 		"OFS":    []string{" "},
 		"*":      []string{"rc"},
 	})
