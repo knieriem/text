@@ -330,21 +330,21 @@ a single command, or a block enclosed in '{' and '}':
 				return cl.returnFromFunc()
 			},
 			weakStatus: true,
-			Help:       "exit the current loop",
+			Help:       "Return from the current function.",
 		},
 		"break": {
 			Fn: func(_ Context, _ []string) error {
 				return cl.breakLoop()
 			},
 			weakStatus: true,
-			Help:       "exit the current loop",
+			Help:       "Exit the current loop.",
 		},
 		"false": {
 			Fn: func(_ Context, _ []string) error {
 				return errors.New("false")
 			},
 			HideFailure: true,
-			Help:        "return an exit status indicating failure",
+			Help:        "Return an exit status indicating failure",
 		},
 		"sleep": {
 			Fn: func(ctx Context, arg []string) (err error) {
