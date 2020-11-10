@@ -125,7 +125,7 @@ func NewEnv() *Env {
 	env.stack.Push(rc.EnvMap{
 		"prefix": nil,
 		"OFS":    []string{" "},
-		"*":      []string{"rc"},
+		"0":      []string{"rc"},
 	})
 	return env
 }
@@ -699,8 +699,7 @@ func (cl *CmdLine) Process() error {
 			} else {
 				cl.cur.savedArgs = cl.env.stack.Get("*")
 			}
-			args[0] = ""
-			cl.env.stack.Set("*", args)
+			cl.env.stack.Set("*", args[1:])
 			cl.cur.isFunc = true
 			continue
 		}

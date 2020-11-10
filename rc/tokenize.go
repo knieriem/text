@@ -166,12 +166,16 @@ func (tok *Tokenizer) expandEnv(t token) token {
 		i := 0
 		if argrefRE.MatchString(ref) {
 			i, _ = strconv.Atoi(ref)
+			i--
 			ref = "*"
 		} else if si := arridxRE.FindStringSubmatchIndex(ref); len(si) == 4 {
 			index := ref[si[2]:si[3]]
-			if index != "0" && index != "" {
-				i, _ = strconv.Atoi(index)
+			if index == "0" || index == "" {
+				t.setString("")
+				break
 			}
+			i, _ = strconv.Atoi(index)
+			i--
 			ref = ref[:si[0]]
 		}
 		value := tok.Getenv(ref)
