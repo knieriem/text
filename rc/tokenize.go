@@ -80,6 +80,7 @@ type groupToken []token
 type stringToken string
 type varRefToken struct {
 	stringToken
+	isCount bool
 }
 type assignmentToken struct {
 	stringToken
@@ -164,6 +165,12 @@ func (tok *Tokenizer) expandEnv(t token) token {
 	case *varRefToken:
 		ref := x.String()[1:]
 		i := 0
+		if x.isCount {
+			ref = ref[1:]
+			value := tok.Getenv(ref)
+			t.setString(strconv.Itoa(len(value)))
+			break
+		}
 		if argrefRE.MatchString(ref) {
 			i, _ = strconv.Atoi(ref)
 			i--
@@ -357,6 +364,14 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 			flushToken(i)
 			i0++
 		case '#':
+			if ref, ok := t.(*varRefToken); ok {
+				if ref.isCount {
+					err = tokenSyntaxErr(r)
+					return
+				}
+				ref.isCount = true
+				break
+			}
 			addField(i)
 			return
 		case '=':

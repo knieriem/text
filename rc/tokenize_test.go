@@ -18,6 +18,8 @@ var testEnvMap = EnvMap{
 	"foo":    {"bar"},
 	"ar":     {"az"},
 	"ba":     {"fo"},
+	"*":      {"x", "y", "z"},
+	"args":   {"x", "y"},
 }
 
 var commonTests = []testSpec{
@@ -81,6 +83,19 @@ var tokenizeCmdTests = []testSpec{
 		fields: []string{
 			"$a", "squirrel", "eats", "a", "hazelnut",
 		},
+	}, {
+		input: "args contains $#args elements",
+		fields: []string{
+			"args", "contains", "2", "elements",
+		},
+	}, {
+		input: "$#none $#*",
+		fields: []string{
+			"0", "3",
+		},
+	}, {
+		input:    "foo $## bar",
+		mustFail: true,
 	}, {
 		input: "a=b=c foo",
 		fields: []string{
