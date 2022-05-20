@@ -70,10 +70,13 @@ type CmdLine struct {
 	env         *Env
 	tplMap      *templateMap
 
-	cmdMap       CmdMap
-	builtin      CmdMap
-	funcMap      map[string]string
-	InitRc       io.ReadCloser
+	cmdMap  CmdMap
+	builtin CmdMap
+	funcMap map[string]string
+	InitRc  io.ReadCloser
+	flags   struct {
+		e bool
+	}
 	ExtraHelp    func()
 	DefaultGroup string
 	Prompt       string
@@ -220,6 +223,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
 				cond := rc.JoinCmd(arg[1:len(arg)-1]) + "\n" + "_testcond\n"
 				cl.pushStringStack(cond, w)
 				cl.cur.cond.cmd = cmd
+				cl.cur.isCompound = true
 				return nil
 			},
 		},
@@ -248,7 +252,9 @@ func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
 					return errors.New("false")
 				}
 				cmd := rc.JoinCmd(arg[1:]) + "\n" + "_!\n"
+				cplx := cl.cur.isCompound
 				cl.pushStringStack(cmd, extractWriter(ctx))
+				cl.cur.isCompound = cplx
 				return nil
 			},
 		},
@@ -279,6 +285,23 @@ func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
 				return errors.New("no match")
 			},
 			Help: `Returns success if subject matches any pattern.`,
+		},
+
+		"flag": {
+			Arg: []string{"f", "+-"},
+			Fn: func(ctx Context, arg []string) (err error) {
+				f := arg[1]
+				v := arg[2] == "+"
+				switch f {
+				default:
+					return fmt.Errorf("unknown flag %q", f)
+				case "e":
+					cl.flags.e = v
+				}
+				return nil
+			},
+			Help: `Set a flag as in Plan 9's rc:
+	e	exit if a simple command (not part of an if-condition) fails`,
 		},
 		"fn": {
 			Opt: []string{"NAME", "CMD", "..."},
@@ -468,10 +491,12 @@ type stackEntry struct {
 	lineReader *cmdLineReader
 	repetition *repetition
 	rewind     func() io.ReadCloser
+
 	w          text.Writer
 	popEnv     bool
 	savedArgs  []string
 	isFunc     bool
+	isCompound bool
 	cond       struct {
 		cmd    string
 		result *bool
@@ -589,6 +614,9 @@ func (cl *CmdLine) setFnError(fnName string, err error) {
 		h(err)
 	}
 	cl.lastOk = false
+	if cl.flags.e && !cl.cur.isCompound {
+		cl.exitFlag = true
+	}
 }
 
 func (cl *CmdLine) Process() error {
@@ -606,6 +634,9 @@ func (cl *CmdLine) Process() error {
 
 	var ictx *icontext
 	for {
+		if cl.exitFlag {
+			break
+		}
 		cl.WritePrompt(cl.Prompt)
 		go func() {
 			ready <- cl.Scan()
@@ -825,9 +856,6 @@ func (cl *CmdLine) Process() error {
 				cl.popStackAll()
 			}
 			cl.setFnError(name, err)
-		}
-		if cl.exitFlag {
-			break
 		}
 	}
 	return nil
