@@ -80,10 +80,7 @@ type CmdLine struct {
 	WritePrompt  func(string) error
 	Stdout       io.Writer
 	Forward      io.Writer
-	Errf         func(format string, v ...interface{})
-	FnNotFound   func(string)
-	FnFailed     func(string, error)
-	FnWrongNArg  func(string)
+	handleError  func(err error)
 	Open         func(filename string) (io.ReadCloser, error)
 	cmdHook      CmdHookFunc
 
@@ -392,15 +389,8 @@ a single command, or a block enclosed in '{' and '}':
 		_, err := cl.Stdout.Write([]byte(prompt))
 		return err
 	}
-	cl.Errf = func(string, ...interface{}) {}
-	cl.FnNotFound = func(cmd string) {
-		cl.Errf("%s: no such command\n", cmd)
-	}
-	cl.FnFailed = func(cmd string, err error) {
-		cl.Errf("%s: %s\n", cmd, err)
-	}
-	cl.FnWrongNArg = func(cmd string) {
-		cl.Errf("%s: wrong number of arguments\n", cmd)
+	cl.handleError = func(err error) {
+		fmt.Fprintln(os.Stderr, err)
 	}
 	cl.cIntr = make(chan struct{}, 0)
 	cl.tok = new(rc.Tokenizer)
@@ -571,6 +561,36 @@ func (cl *CmdLine) returnFromFunc() error {
 var ErrInterrupt = errors.New("interrupted")
 var ErrLastCmdFailed = errors.New("last command failed")
 
+var ErrWrongNArg = errors.New("wrong number of arguments")
+var ErrNotFound = errors.New("no such command")
+
+type FnError struct {
+	Fn  string
+	err error
+}
+
+func (e *FnError) Error() string {
+	return fmt.Sprintf("%s: %v", e.Fn, e.err)
+}
+func (e *FnError) Unwrap() error {
+	return e.err
+}
+
+func (cl *CmdLine) setError(err error) {
+	if h := cl.handleError; h != nil {
+		h(err)
+	}
+}
+func (cl *CmdLine) setFnError(fnName string, err error) {
+	if h := cl.handleError; h != nil {
+		if fnName != "" {
+			err = &FnError{Fn: fnName, err: err}
+		}
+		h(err)
+	}
+	cl.lastOk = false
+}
+
 func (cl *CmdLine) Process() error {
 	var line string
 
@@ -609,7 +629,7 @@ func (cl *CmdLine) Process() error {
 			if len(cl.inputStack) == 0 {
 				return ErrInterrupt
 			} else {
-				cl.Errf("%v\n", ErrInterrupt)
+				cl.setError(ErrInterrupt)
 				cl.popStackAll()
 				cl.WritePrompt(cl.Prompt)
 				goto selAgain
@@ -622,7 +642,7 @@ func (cl *CmdLine) Process() error {
 			if len(cl.inputStack) == 0 {
 				return ErrInterrupt
 			} else {
-				cl.Errf("%v\n", ErrInterrupt)
+				cl.setError(ErrInterrupt)
 				cl.popStackAll()
 				cl.WritePrompt(cl.Prompt)
 				goto selAgain
@@ -660,15 +680,13 @@ func (cl *CmdLine) Process() error {
 		w := cl.cur.w
 		c, err := cl.tok.ParseCmdLine(line)
 		if err != nil {
-			cl.Errf("%v\n", err)
-			cl.lastOk = false
+			cl.setFnError("", err)
 			continue
 		}
 		if c.Redir.Type != "" {
 			w, err = cl.redirect(c.Redir.Type, c.Redir.Filename)
 			if err != nil {
-				cl.Errf("%v\n", err)
-				cl.lastOk = false
+				cl.setFnError("", err)
 				continue
 			}
 		}
@@ -734,15 +752,13 @@ func (cl *CmdLine) Process() error {
 			if cl.Forward != nil {
 				cl.fwd([]byte(rc.JoinCmd(args) + "\n"))
 			} else {
-				cl.FnNotFound(name)
-				cl.lastOk = false
+				cl.setFnError(name, ErrNotFound)
 			}
 			continue
 		}
 		if cmd.Map != nil {
 			if cmd, ok = cmd.Map[""]; !ok {
-				cl.FnNotFound(name)
-				cl.lastOk = false
+				cl.setFnError(name, ErrNotFound)
 				continue
 			}
 		}
@@ -767,14 +783,12 @@ func (cl *CmdLine) Process() error {
 		}
 		nmin = narg
 		if n > narg+nopt {
-			cl.FnWrongNArg(name)
-			cl.lastOk = false
+			cl.setFnError(name, ErrWrongNArg)
 			continue
 		}
 	checkNMin:
 		if n < nmin {
-			cl.FnWrongNArg(name)
-			cl.lastOk = false
+			cl.setFnError(name, ErrWrongNArg)
 			continue
 		}
 		if privEnv {
@@ -810,7 +824,7 @@ func (cl *CmdLine) Process() error {
 				err = ErrInterrupt
 				cl.popStackAll()
 			}
-			cl.FnFailed(name, err)
+			cl.setFnError(name, err)
 		}
 		if cl.exitFlag {
 			break
@@ -822,7 +836,7 @@ func (cl *CmdLine) Process() error {
 func (cl *CmdLine) fwd(line []byte) {
 	_, err := cl.Forward.Write(line)
 	if err != nil {
-		cl.Errf("forwarding write failed: %v\n", err)
+		cl.setError(fmt.Errorf("forwarding write failed: %w", err))
 	}
 
 }
@@ -1038,7 +1052,7 @@ retry:
 		}
 	}
 	if !hasWritten && len(args) > 0 {
-		cl.FnNotFound(args[0])
+		cl.setFnError(args[0], ErrNotFound)
 	}
 	if cl.ExtraHelp != nil {
 		cl.ExtraHelp()
