@@ -63,22 +63,24 @@ func quote(s, unquoted string) string {
 	return q
 }
 
-func Join(list []string) (js string) {
+func Join(list []string) string {
 	if len(list) == 0 {
-		return
+		return ""
 	}
+	js := ""
 	for _, s := range list {
 		js += " " + Quote(s)
 	}
-	return
+	return js[1:]
 }
 
-func JoinCmd(list []string) (js string) {
+func JoinCmd(list []string) string {
 	if len(list) == 0 {
-		return
+		return ""
 	}
+	js := ""
 	for _, s := range list {
 		js += " " + QuoteCmd(s)
 	}
-	return
+	return js[1:]
 }
