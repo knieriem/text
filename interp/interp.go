@@ -40,6 +40,7 @@ type Cmd struct {
 	ignoreEnv   bool
 	HideFailure bool
 	weakStatus  bool
+	isCompound  bool
 }
 
 type CmdMap map[string]*Cmd
@@ -76,6 +77,7 @@ type CmdLine struct {
 	InitRc  io.ReadCloser
 	flags   struct {
 		e bool
+		x bool
 	}
 	ExtraHelp    func()
 	DefaultGroup string
@@ -83,6 +85,7 @@ type CmdLine struct {
 	WritePrompt  func(string) error
 	Stdout       io.Writer
 	Forward      io.Writer
+	printCmd     func(*rc.CmdLine)
 	handleError  func(err error)
 	Open         func(filename string) (io.ReadCloser, error)
 	cmdHook      CmdHookFunc
@@ -203,7 +206,8 @@ func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
 			Help: "Print the contents of FILE.",
 		},
 		"if": {
-			Arg: []string{"CMD", "..."},
+			isCompound: true,
+			Arg:        []string{"CMD", "..."},
 			Fn: func(ctx Context, arg []string) (err error) {
 				cmd, err := cl.ParseCmd(arg[len(arg)-1:])
 				if err != nil {
@@ -245,6 +249,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
 			},
 		},
 		"!": {
+			isCompound:  true,
 			HideFailure: true,
 			Opt:         []string{"CMD", "..."},
 			Fn: func(ctx Context, arg []string) (err error) {
@@ -297,6 +302,8 @@ func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
 					return fmt.Errorf("unknown flag %q", f)
 				case "e":
 					cl.flags.e = v
+				case "x":
+					cl.flags.x = v
 				}
 				return nil
 			},
@@ -304,7 +311,8 @@ func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
 	e	exit if a simple command (not part of an if-condition) fails`,
 		},
 		"fn": {
-			Opt: []string{"NAME", "CMD", "..."},
+			isCompound: true,
+			Opt:        []string{"NAME", "CMD", "..."},
 			Fn: func(w Context, arg []string) error {
 				switch len(arg) {
 				case 1:
@@ -324,6 +332,26 @@ a single command, or a block enclosed in '{' and '}':
 		cmdb
 		cmdc
 	}`,
+		},
+		"shift": {
+			Opt: []string{"N"},
+			Fn: func(_ Context, arg []string) error {
+				i := 1
+				if len(arg) == 2 {
+					u, err := strconv.ParseUint(arg[1], 10, 0)
+					if err != nil {
+						return err
+					}
+					i = int(u)
+				}
+				args := cl.env.stack.Get("*")
+				if i > len(args) {
+					i = len(args)
+				}
+				cl.env.stack.Set("*", args[i:])
+				return nil
+			},
+			Help: "Delete the first n (default: 1) elements of $*",
 		},
 		"unbind": {
 			Arg: []string{"NAME"},
@@ -411,6 +439,9 @@ a single command, or a block enclosed in '{' and '}':
 		}
 		_, err := cl.Stdout.Write([]byte(prompt))
 		return err
+	}
+	cl.printCmd = func(cmd *rc.CmdLine) {
+		fmt.Fprintf(os.Stdout, "%% %v\n", cmd)
 	}
 	cl.handleError = func(err error) {
 		fmt.Fprintln(os.Stderr, err)
@@ -724,6 +755,9 @@ func (cl *CmdLine) Process() error {
 		args := c.Fields
 		if len(args) == 0 {
 			if a := c.Assignments; len(a) != 0 {
+				if cl.flags.x {
+					cl.printCmd(c)
+				}
 				cl.env.stack.Insert(a)
 				continue
 			}
@@ -750,6 +784,9 @@ func (cl *CmdLine) Process() error {
 			}
 			cl.env.stack.Set("*", args[1:])
 			cl.cur.isFunc = true
+			if cl.flags.x {
+				cl.printCmd(c)
+			}
 			continue
 		}
 		if name == "help" {
@@ -830,6 +867,9 @@ func (cl *CmdLine) Process() error {
 		ictx.Writer = w
 		if cl.cmdHook != nil {
 			cl.cmdHook(ictx)
+		}
+		if cl.flags.x && !cmd.Hidden && !cmd.isCompound {
+			cl.printCmd(c)
 		}
 		err = cmd.Fn(ictx, args)
 		select {
