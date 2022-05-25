@@ -83,12 +83,20 @@ type CmdLine struct {
 	DefaultGroup string
 	Prompt       string
 	WritePrompt  func(string) error
-	Stdout       io.Writer
-	Forward      io.Writer
-	printCmd     func(*rc.CmdLine)
-	handleError  func(err error)
-	Open         func(filename string) (io.ReadCloser, error)
-	cmdHook      CmdHookFunc
+
+	// Stdout is used for writing normal output.
+	// It is initialized with os.Stdout.
+	//
+	// Deprecated: Instead of setting Stdout directly,
+	// use the WithStdout option.
+	Stdout io.Writer
+	errOut io.Writer
+
+	Forward     io.Writer
+	printCmd    func(*rc.CmdLine)
+	handleError func(err error)
+	Open        func(filename string) (io.ReadCloser, error)
+	cmdHook     CmdHookFunc
 
 	cIntr         chan struct{}
 	exitFlag      bool
@@ -112,6 +120,18 @@ func newCmdLineReader(s text.Scanner, c io.Closer) *cmdLineReader {
 }
 
 type Option func(cl *CmdLine)
+
+func WithStdout(w io.Writer) Option {
+	return func(cl *CmdLine) {
+		cl.Stdout = w
+	}
+}
+
+func WithStderr(w io.Writer) Option {
+	return func(cl *CmdLine) {
+		cl.errOut = w
+	}
+}
 
 func WithEnv(e *Env) Option {
 	return func(cl *CmdLine) {
@@ -427,6 +447,8 @@ a single command, or a block enclosed in '{' and '}':
 		}
 	}
 
+	cl.Stdout = os.Stdout
+	cl.errOut = os.Stderr
 	cl.Open = func(filename string) (io.ReadCloser, error) {
 		return os.Open(filename)
 	}
@@ -441,10 +463,10 @@ a single command, or a block enclosed in '{' and '}':
 		return err
 	}
 	cl.printCmd = func(cmd *rc.CmdLine) {
-		fmt.Fprintf(os.Stdout, "%% %v\n", cmd)
+		fmt.Fprintf(cl.Stdout, "%% %v\n", cmd)
 	}
 	cl.handleError = func(err error) {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(cl.errOut, err)
 	}
 	cl.cIntr = make(chan struct{}, 0)
 	cl.tok = new(rc.Tokenizer)
