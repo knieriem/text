@@ -2,6 +2,7 @@
 package rc
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -30,6 +31,26 @@ type CmdLine struct {
 	Assignments EnvMap
 	Fields      []string
 	Redir       Redirection
+}
+
+func (c *CmdLine) String() string {
+	sep := ""
+	b := new(bytes.Buffer)
+	n, _ := c.Assignments.WriteTo(b)
+	if n != 0 {
+		sep = " "
+	}
+	if len(c.Fields) != 0 {
+		cs := JoinCmd(c.Fields)
+		if cs != "" {
+			fmt.Fprint(b, sep, cs)
+			sep = " "
+		}
+	}
+	if r := &c.Redir; r.Type != "" {
+		fmt.Fprint(b, sep, r.Type, r.Filename)
+	}
+	return b.String()
 }
 
 type Redirection struct {
