@@ -53,6 +53,8 @@ func (tok *Tokenizer) ParseCmdLine(s string) (c *CmdLine, err error) {
 			tokens[i] = tok.expandEnv(t)
 		}
 	}
+	tokens = flattenStringLists(tokens)
+
 	c = new(CmdLine)
 	c.Fields = tokens.fields()
 	c.Redir = tokens.redirection()
@@ -103,6 +105,35 @@ func (s *stringToken) addString(arg string) {
 
 func (s stringToken) String() string {
 	return string(s)
+}
+
+type stringListToken []string
+
+func (stringListToken) String() string   { return "<stringListToken>" }
+func (stringListToken) setString(string) {}
+
+func flattenStringLists(list groupToken) groupToken {
+	n := 0
+	for _, tok := range list {
+		if s, ok := tok.(stringListToken); ok {
+			n += len(s)
+		} else {
+			n += 1
+		}
+	}
+	dest := make(groupToken, 0, n)
+	for _, tok := range list {
+		if list, ok := tok.(stringListToken); ok {
+			for _, s := range list {
+				ts := new(stringToken)
+				ts.setString(s)
+				dest = append(dest, ts)
+			}
+		} else {
+			dest = append(dest, tok)
+		}
+	}
+	return dest
 }
 
 func (list groupToken) String() (s string) {
@@ -164,7 +195,7 @@ func (tok *Tokenizer) expandEnv(t token) token {
 		x.name = tok.expandEnv(x.name)
 	case *varRefToken:
 		ref := x.String()[1:]
-		i := 0
+		i := -1
 		if x.isCount {
 			ref = ref[1:]
 			value := tok.Getenv(ref)
@@ -187,7 +218,16 @@ func (tok *Tokenizer) expandEnv(t token) token {
 		}
 		value := tok.Getenv(ref)
 		t = new(stringToken)
-		if len(value) <= i {
+		if i == -1 {
+			switch len(value) {
+			case 0:
+				t.setString("")
+			case 1:
+				t.setString(value[0])
+			default:
+				t = stringListToken(value)
+			}
+		} else if len(value) <= i {
 			t.setString("")
 		} else {
 			t.setString(value[i])

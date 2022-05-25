@@ -89,6 +89,16 @@ var tokenizeCmdTests = []testSpec{
 			"args", "contains", "2", "elements",
 		},
 	}, {
+		input: "'$args': $args",
+		fields: []string{
+			"$args:", "x", "y",
+		},
+	}, {
+		input: "'$*': $*",
+		fields: []string{
+			"$*:", "x", "y", "z",
+		},
+	}, {
 		input: "$#none $#*",
 		fields: []string{
 			"0", "3",
