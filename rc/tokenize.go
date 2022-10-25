@@ -438,7 +438,7 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 			addField(i)
 			return
 		case '=':
-			if _, ok := t.(*assignmentToken); !ok {
+			if _, ok := t.(*assignmentToken); !ok && countAssign && !seenAssign && i0 != -1 {
 				seenAssign = true
 				flushToken(i)
 				a := new(assignmentToken)
@@ -447,7 +447,7 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 				t = a
 				break
 			}
-			// fallthrough
+			fallthrough
 		default:
 			if _, ok := t.(*varRefToken); ok {
 				if !unicode.IsLetter(r) && r != '_' && !unicode.IsDigit(r) && r != '*' && r != '(' && r != ')' {
