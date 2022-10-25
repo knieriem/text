@@ -920,6 +920,11 @@ func (cl *CmdLine) Process() error {
 			cl.setFnError(name, err)
 		}
 	}
+	if cl.flags.e {
+		if !cl.lastOk {
+			return ErrLastCmdFailed
+		}
+	}
 	return nil
 }
 
