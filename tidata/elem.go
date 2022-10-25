@@ -56,7 +56,6 @@ func (e Elem) Key() (key string) {
 // Find the first occurance of ‘key’ in the list of childs,
 // on success, return the corresponding slice index
 // and a pointer to the Elem. Otherwise, return nil.
-//
 func (el *Elem) Lookup(key string) (i int, e *Elem) {
 	var c Elem
 
@@ -81,7 +80,6 @@ func (el *Elem) Match(key string) bool {
 // Create a map from an Elem's slice of children. Each key of a
 // child will be used as a key into the map, a pointer to the
 // child's Elem as value.
-//
 func (el *Elem) MapChildren() (m map[string]*Elem, err error) {
 	m = make(map[string]*Elem, len(el.Children))
 
