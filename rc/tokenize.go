@@ -67,8 +67,10 @@ func (tok *Tokenizer) ParseCmdLine(s string) (c *CmdLine, err error) {
 	if err != nil {
 		return
 	}
-	//	fmt.Printf("TokenizeCmd: %q\n", s)
-	//	dump(tokens, "	")
+	if false {
+		fmt.Printf("TokenizeCmd: %q\n", s)
+		dump(tokens, "	")
+	}
 	if tok.Getenv != nil {
 		for i, t := range tokens {
 			tokens[i] = tok.expandEnv(t)
@@ -203,7 +205,7 @@ func dump(list groupToken, indent string) {
 }
 
 var argrefRE = regexp.MustCompile("^[1-9][0-9]*$")
-var arridxRE = regexp.MustCompile("\\(([0-9]*)\\)$")
+var arridxRE = regexp.MustCompile(`\(([0-9]*)\)$`)
 
 func (tok *Tokenizer) expandEnv(t token) token {
 	switch x := t.(type) {

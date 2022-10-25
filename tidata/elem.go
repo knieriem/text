@@ -92,7 +92,7 @@ func (el *Elem) MapChildren() (m map[string]*Elem, err error) {
 			key = key[:i]
 		}
 		if _, ok := m[key]; ok {
-			err = fmt.Errorf("tidata: duplicate keys: \"%s.%s\"\n", el.Text, key)
+			err = fmt.Errorf("tidata: duplicate keys: \"%s.%s\"", el.Text, key)
 		} else {
 			m[key] = c
 		}

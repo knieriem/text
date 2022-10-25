@@ -468,7 +468,7 @@ a single command, or a block enclosed in '{' and '}':
 	cl.handleError = func(err error) {
 		fmt.Fprintln(cl.errOut, err)
 	}
-	cl.cIntr = make(chan struct{}, 0)
+	cl.cIntr = make(chan struct{})
 	cl.tok = new(rc.Tokenizer)
 
 	for _, option := range opts {
@@ -960,7 +960,6 @@ func (cl *CmdLine) dumpFunc(_ text.Writer, name string) {
 	inw := gioutil.NewIndentWriter(cl.Stdout, []byte{'\t'})
 	fmt.Fprint(inw, body)
 	fmt.Fprintln(cl.Stdout, "}")
-	return
 }
 
 func (cl *CmdLine) parseFunc(name string, args []string) (err error) {

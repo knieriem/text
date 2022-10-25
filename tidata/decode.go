@@ -315,7 +315,6 @@ func (d *decoder) decodeStruct(dest reflect.Value, src Elem) {
 		}
 		d.deferredWork = nil
 	}
-	return
 }
 
 func (d *decoder) postProcess(v reflect.Value, src Elem) {
@@ -353,7 +352,6 @@ func mkslice(v reflect.Value, n int) {
 		return
 	}
 	v.Set(reflect.MakeSlice(v.Type(), n, n))
-	return
 }
 
 type Unmarshaler interface {
@@ -532,5 +530,4 @@ func (d *decoder) decodeString(v reflect.Value, s string) {
 		}
 		v.SetFloat(n)
 	}
-	return
 }
