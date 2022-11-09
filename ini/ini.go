@@ -4,26 +4,25 @@ import (
 	"bufio"
 	"flag"
 	"io"
+	"io/fs"
 	"os"
 	"os/user"
 	"path"
 	"path/filepath"
 	"strings"
 
-	"github.com/knieriem/vfsutil"
-	"golang.org/x/tools/godoc/vfs"
+	"github.com/knieriem/fsutil"
 
 	"github.com/knieriem/text/line"
 	"github.com/knieriem/text/tidata"
 )
 
-var ns = vfs.NameSpace{}
+var ns = fsutil.NameSpace{}
 
 type File struct {
 	Name       string
 	short      string
 	overridden string
-	ns         vfs.NameSpace
 	Using      string
 	Label      string
 }
@@ -38,12 +37,12 @@ func NewFile(name, short, option string) (f *File) {
 	return
 }
 
-func BindFS(fs vfs.FileSystem) {
-	ns.Bind("/", fs, "/", vfs.BindBefore)
+func BindFS(fsys fs.FS) {
+	ns.Bind(".", fsys, fsutil.BindBefore())
 }
 
 func BindOS(path, label string) {
-	ns.Bind("/", vfsutil.LabeledOS(path, label), "/", vfs.BindBefore)
+	ns.Bind(".", os.DirFS(path), withLabel(label), fsutil.BindBefore())
 }
 
 func BindHomeLib() {
@@ -52,7 +51,7 @@ func BindHomeLib() {
 		return
 	}
 	lib := filepath.Join(u.HomeDir, "lib")
-	ns.Bind("/", vfsutil.LabeledOS(lib, "$home/lib"), "/", vfs.BindBefore)
+	ns.Bind(".", os.DirFS(lib), withLabel("$home/lib"), fsutil.BindBefore())
 }
 
 func BindHomeLibDir(subDir string) {
@@ -61,7 +60,7 @@ func BindHomeLibDir(subDir string) {
 		return
 	}
 	lib := filepath.Join(u.HomeDir, "lib", subDir)
-	ns.Bind("/", vfsutil.LabeledOS(lib, "$home/lib/"+subDir), "/", vfs.BindBefore)
+	ns.Bind(".", os.DirFS(lib), withLabel("$home/lib/"+subDir), fsutil.BindBefore())
 }
 
 func LookupFiles(dir, ext string) ([]File, error) {
@@ -105,11 +104,12 @@ func (f *File) Parse(conf interface{}) (err error) {
 		if err != nil {
 			return nil
 		}
-		using = ini
-		if fs, ok := r.(vfsutil.FSInfo); ok {
-			label = fs.Label()
-			name = filepath.Join(fs.Root(), name)
-			if label == "builtin" {
+		using = name
+		var inf fsAnnotations
+		if inf.from(r) {
+			name = inf.absPath(name)
+			label = inf.label
+			if inf.isBuiltin() {
 				using = "builtin " + ini
 			} else {
 				using += " from " + label
@@ -145,63 +145,54 @@ type WalkFn func(partName string, decode DecodeFn) error
 // a directory. How exactly the parts are handled, is left to the
 // caller, who specifies walkFn.
 func WalkParts(name string, walkFn WalkFn) (label string, err error) {
-	fsRoot := ""
+	var inf fsAnnotations
 	ext := path.Ext(name)
 	stem := name[:len(name)-len(ext)]
-	fi, err := ns.Stat(name)
+	fi, err := fs.Stat(ns, name)
 	if err != nil {
 		// name does not exist, lookup stem instead
-		fi1, err1 := ns.Stat(stem)
+		fi1, err1 := fs.Stat(ns, stem)
 		if err1 != nil || !fi1.IsDir() {
 			return "", err
 		}
-		if fs, ok := fi1.(vfsutil.FSInfo); ok {
-			label = fs.Label()
-			fsRoot = fs.Root()
-		}
+		inf.from(fi1)
 		name = stem
 		fi = fi1
-	} else if fs, ok := fi.(vfsutil.FSInfo); ok {
-		label = fs.Label()
-		fsRoot = fs.Root()
-		if label == "builtin" {
-			// found a builtin configuration, try to lookup
-			// a non-builtin stem config
-			fi1, err := ns.Stat(stem)
-			if err == nil && fi1.IsDir() {
-				if fs, ok := fi1.(vfsutil.FSInfo); ok {
-					if l1 := fs.Label(); l1 != "builtin" {
-						name = stem
-						fi = fi1
-					}
-				}
+	} else if inf.from(fi) && inf.isBuiltin() {
+		// found a builtin configuration, try to lookup
+		// a non-builtin stem config
+		fi1, err := fs.Stat(ns, stem)
+		if err == nil && fi1.IsDir() {
+			if inf.from(fi1) && !inf.isBuiltin() {
+				name = stem
+				fi = fi1
 			}
 		}
 	}
 
 	if fi.IsDir() {
-		err = parseDir(fsRoot, name, ext, walkFn)
+		err = parseDir(name, ext, walkFn, &inf)
 	} else {
-		err = parsePart(fsRoot, name, walkFn)
+		err = parsePart(name, walkFn, &inf)
 	}
-	return label, err
+	return inf.label, err
 }
 
-func parseDir(fsRoot, dirname, ext string, walkFn WalkFn) error {
+func parseDir(dirname, ext string, walkFn WalkFn, inf *fsAnnotations) error {
 	list, err := ns.ReadDir(dirname)
 	if err != nil {
 		return err
 	}
-	for _, fi := range list {
-		if fi.IsDir() {
+	for _, d := range list {
+		if d.IsDir() {
 			continue
 		}
-		name := fi.Name()
+		name := d.Name()
 		if path.Ext(name) != ext {
 			continue
 		}
 		path := path.Join(dirname, name)
-		err := parsePart(fsRoot, path, walkFn)
+		err := parsePart(path, walkFn, inf)
 		if err != nil {
 			return err
 		}
@@ -209,7 +200,7 @@ func parseDir(fsRoot, dirname, ext string, walkFn WalkFn) error {
 	return nil
 }
 
-func parsePart(fsRoot, name string, walkFn WalkFn) error {
+func parsePart(name string, walkFn WalkFn, inf *fsAnnotations) error {
 	err := walkFn(path.Base(name), func(data interface{}) error {
 		f, err := ns.Open(name)
 		if err != nil {
@@ -218,7 +209,7 @@ func parsePart(fsRoot, name string, walkFn WalkFn) error {
 		return Parse(f, data)
 	})
 	if err != nil {
-		err = line.ErrInsertFilename(err, filepath.Join(fsRoot, name))
+		err = line.ErrInsertFilename(err, inf.absPath(name))
 	}
 	return err
 }
@@ -282,4 +273,42 @@ func replaceSpecial(s, old, new string) string {
 		s += new + strings.Title(seg)
 	}
 	return s
+}
+
+func withLabel(val string) fsutil.BindOption {
+	return fsutil.WithValue(fsutil.LabelKey, val)
+}
+
+type fsAnnotations struct {
+	label  string
+	fsRoot string
+}
+
+func (a *fsAnnotations) from(item interface{}) bool {
+	it, ok := item.(fsutil.Item)
+	if !ok {
+		return false
+	}
+	fsys := it.FS()
+	label, ok := fsutil.Value(fsys, fsutil.LabelKey).(string)
+	if !ok {
+		return false
+	}
+	a.label = label
+	a.fsRoot, _ = fsutil.Value(fsys, fsutil.RootOSDirKey).(string)
+	return true
+}
+
+func (a *fsAnnotations) isBuiltin() bool {
+	return a.label == "builtin"
+}
+
+func (a *fsAnnotations) absPath(name string) string {
+	if a.fsRoot != "" {
+		return filepath.Join(a.fsRoot, name)
+	}
+	if a.label == "" {
+		return name
+	}
+	return a.label + ":" + name
 }
