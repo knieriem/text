@@ -75,6 +75,16 @@ func (tok *Tokenizer) ParseCmdLine(s string) (c *CmdLine, err error) {
 		for i, t := range tokens {
 			tokens[i] = tok.expandEnv(t)
 		}
+		// filter out nil tokens
+		iw := 0
+		for _, t := range tokens {
+			if t == nil {
+				continue
+			}
+			tokens[iw] = t
+			iw++
+		}
+		tokens = tokens[:iw]
 	}
 	tokens = flattenStringLists(tokens)
 
@@ -244,7 +254,7 @@ func (tok *Tokenizer) expandEnv(t token) token {
 		if i == -1 {
 			switch len(value) {
 			case 0:
-				t.setString("")
+				return nil
 			case 1:
 				t.setString(value[0])
 			default:

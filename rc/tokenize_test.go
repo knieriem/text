@@ -8,6 +8,7 @@ type testSpec struct {
 	input       string
 	fields      []string
 	assignments EnvMap
+	env         EnvMap
 	redir       Redirection
 	mustFail    bool
 }
@@ -16,6 +17,7 @@ var testEnvMap = EnvMap{
 	"mammal": {"squirrel"},
 	"nut":    {"hazelnut"},
 	"foo":    {"bar"},
+	"bar":    {""},
 	"ar":     {"az"},
 	"ba":     {"fo"},
 	"*":      {"x", "y", "z"},
@@ -99,6 +101,14 @@ var tokenizeCmdTests = []testSpec{
 			"$*:", "x", "y", "z",
 		},
 	}, {
+		input: "'empty args:' $* $notexist end",
+		env: EnvMap{
+			"*": nil,
+		},
+		fields: []string{
+			"empty args:", "end",
+		},
+	}, {
 		input: "$#none $#*",
 		fields: []string{
 			"0", "3",
@@ -157,10 +167,13 @@ func TestTokenize(t *testing.T) {
 
 func TestTokenizeCmd(t *testing.T) {
 	tok := new(Tokenizer)
-	tok.Getenv = func(name string) []string {
-		return testEnvMap[name]
-	}
 	for i, test := range append(commonTests, tokenizeCmdTests...) {
+		tok.Getenv = func(name string) []string {
+			if test.env != nil {
+				return test.env[name]
+			}
+			return testEnvMap[name]
+		}
 		cmd, err := tok.ParseCmdLine(test.input)
 		if err != nil {
 			if !test.mustFail {
