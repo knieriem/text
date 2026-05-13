@@ -165,7 +165,18 @@ func (env *Env) Setenv(name, value string) {
 	env.stack.Set(name, []string{value})
 }
 
-type CmdHookFunc func(Context)
+type CmdHookContext struct {
+	Context
+	Name         string
+	Cmd          *Cmd
+	Line         *rc.CmdLine
+	Writer       io.Writer
+	IsTopLevel   bool
+	IsRedirected bool
+	IsCompound   bool
+}
+
+type CmdHookFunc func(*CmdHookContext)
 
 // WithCmdHook registers a function that is called each time
 // before a command is called. The context value in the first
@@ -525,6 +536,7 @@ func (cl *CmdLine) redirect(op string, filename string) (text.Writer, error) {
 	cl.redirFileMap[filename] = file
 opened:
 	w := cl.newWriter(file)
+	w.redir = true
 	return w, nil
 }
 
@@ -888,7 +900,21 @@ func (cl *CmdLine) Process() error {
 		}
 		ictx.Writer = w
 		if cl.cmdHook != nil {
-			cl.cmdHook(ictx)
+			hc := &CmdHookContext{
+				Context:    ictx,
+				Name:       cmdName,
+				Cmd:        cmd,
+				Line:       c,
+				Writer:     ictx.Writer,
+				IsTopLevel: len(cl.inputStack) == 0,
+				IsCompound: cmd.isCompound,
+			}
+			if tw, ok := w.(text.Writer); ok {
+				if wr, ok := tw.(*writer); ok {
+					hc.IsRedirected = wr.redir
+				}
+			}
+			cl.cmdHook(hc)
 		}
 		if cl.flags.x && !cmd.Hidden && !cmd.isCompound {
 			cl.printCmd(c)
@@ -1164,6 +1190,7 @@ type writer struct {
 	io.Writer
 	fieldSep func() string
 	prefix   func() string
+	redir    bool
 }
 
 func (cl *CmdLine) newWriter(w io.Writer) *writer {
