@@ -18,24 +18,25 @@ func (e *Elem) String() string {
 	return e.pfxString("")
 }
 func (e *Elem) pfxString(pfx string) string {
-	s := pfx + e.Text + "\n"
+	var s strings.Builder
+	s.WriteString(pfx + e.Text + "\n")
 	subPfx := pfx + "\t"
 
 	for i := range e.Children {
-		s += e.Children[i].pfxString(subPfx)
+		s.WriteString(e.Children[i].pfxString(subPfx))
 	}
-	return s
+	return s.String()
 }
 
 func (e *Elem) JoinSubElems(initialIndent, indent, sep string) string {
-	val := ""
+	var val strings.Builder
 	prefix := initialIndent
 	for i := range e.Children {
 		c := &e.Children[i]
-		val += prefix + c.Text + sep
-		val += c.JoinSubElems(prefix+indent, indent, sep)
+		val.WriteString(prefix + c.Text + sep)
+		val.WriteString(c.JoinSubElems(prefix+indent, indent, sep))
 	}
-	return val
+	return val.String()
 }
 
 func (e Elem) Value() (val string) {

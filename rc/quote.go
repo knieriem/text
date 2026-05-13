@@ -28,13 +28,13 @@ func QuoteCmd(s string) string {
 
 func quote(s, unquoted string) string {
 	quotePart := false
-	q := ""
+	var q strings.Builder
 	addPart := func(part string) {
 		if quotePart {
-			q += `'` + strings.Replace(part, `'`, `''`, -1) + `'`
+			q.WriteString(`'` + strings.Replace(part, `'`, `''`, -1) + `'`)
 			quotePart = false
 		} else {
-			q += part
+			q.WriteString(part)
 		}
 
 	}
@@ -48,7 +48,7 @@ func quote(s, unquoted string) string {
 				if i > i0 {
 					addPart(s[i0:i])
 				}
-				q += string(r)
+				q.WriteString(string(r))
 				i0 = i + 1
 				continue
 			}
@@ -60,27 +60,27 @@ func quote(s, unquoted string) string {
 	if len(s) > i0 {
 		addPart(s[i0:])
 	}
-	return q
+	return q.String()
 }
 
 func Join(list []string) string {
 	if len(list) == 0 {
 		return ""
 	}
-	js := ""
+	var js strings.Builder
 	for _, s := range list {
-		js += " " + Quote(s)
+		js.WriteString(" " + Quote(s))
 	}
-	return js[1:]
+	return js.String()[1:]
 }
 
 func JoinCmd(list []string) string {
 	if len(list) == 0 {
 		return ""
 	}
-	js := ""
+	var js strings.Builder
 	for _, s := range list {
-		js += " " + QuoteCmd(s)
+		js.WriteString(" " + QuoteCmd(s))
 	}
-	return js[1:]
+	return js.String()[1:]
 }

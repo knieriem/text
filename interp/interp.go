@@ -1074,7 +1074,7 @@ func (cl *CmdLine) help(w io.Writer, args []string) {
 		cmdName = args[0]
 	}
 	isDir := len(args) == 0
-	pfx := ""
+	var pfx strings.Builder
 	m := cl.cmdMap
 retry:
 	iDot = strings.Index(cmdName, ".")
@@ -1083,7 +1083,7 @@ retry:
 		if cmdName != "" {
 			if name == cmdName {
 				if v.Map != nil {
-					pfx += cmdName + "."
+					pfx.WriteString(cmdName + ".")
 					cmdName = ""
 					isDir = true
 					m = v.Map
@@ -1100,17 +1100,17 @@ retry:
 			if v.Map == nil {
 				continue
 			}
-			pfx += cmdName[:iDot+1]
+			pfx.WriteString(cmdName[:iDot+1])
 			cmdName = cmdName[iDot+1:]
 			m = v.Map
 			goto retry
 		}
 	found:
-		if pfx != "" {
+		if pfx.String() != "" {
 			if name == "" {
-				name = pfx[:len(pfx)-1]
+				name = pfx.String()[:len(pfx.String())-1]
 			} else {
-				name = pfx + name
+				name = pfx.String() + name
 			}
 		}
 		group := v.Group

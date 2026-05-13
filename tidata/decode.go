@@ -92,7 +92,7 @@ func (d *decoder) saveError(err error) {
 
 func (e Elem) Decode(i interface{}, c *Config) (err error) {
 	v := reflect.ValueOf(i)
-	if v.Kind() != reflect.Ptr {
+	if v.Kind() != reflect.Pointer {
 		err = errors.New("argument is not a pointer to an object")
 		return
 	}
@@ -278,7 +278,7 @@ func (d *decoder) decodeStruct(dest reflect.Value, src Elem) {
 				combine = true
 			} else if isSlice {
 				t := v.Type().Elem()
-				if t.Kind() == reflect.Ptr {
+				if t.Kind() == reflect.Pointer {
 					t = t.Elem()
 				}
 				var etu encoding.TextUnmarshaler
@@ -386,7 +386,7 @@ func (d *decoder) decodeItem(v reflect.Value, el Elem) {
 
 retry:
 	switch v.Kind() {
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if v.Type() == reflect.TypeOf(&el) {
 			v.Set(reflect.ValueOf(&el))
 		} else {
