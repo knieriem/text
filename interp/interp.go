@@ -773,178 +773,12 @@ func (cl *CmdLine) Process() error {
 				goto again
 			}
 		}
-		w := cl.cur.w
 		c, err := cl.tok.ParseCmdLine(line)
 		if err != nil {
 			cl.setFnError("", err)
 			continue
 		}
-		if c.Redir.Type != "" {
-			w, err = cl.redirect(c.Redir.Type, c.Redir.Filename)
-			if err != nil {
-				cl.setFnError("", err)
-				continue
-			}
-		}
-		args := c.Fields
-		if len(args) == 0 {
-			if a := c.Assignments; len(a) != 0 {
-				if cl.flags.x {
-					cl.printCmd(c)
-				}
-				cl.env.stack.Insert(a)
-				continue
-			}
-			if cl.Forward != nil {
-				cl.fwd([]byte{'\n'})
-			}
-			continue
-		}
-		privEnv := false
-		if len(c.Assignments) != 0 {
-			privEnv = true
-		}
-
-		name := args[0]
-		if body, ok := cl.funcMap[name]; ok {
-			if privEnv {
-				cl.env.stack.Push(c.Assignments)
-			}
-			cl.pushStringStack(body, w)
-			if privEnv {
-				cl.cur.popEnv = true
-			} else {
-				cl.cur.savedArgs = cl.env.stack.Get("*")
-			}
-			cl.env.stack.Set("*", args[1:])
-			cl.cur.isFunc = true
-			if cl.flags.x {
-				cl.printCmd(c)
-			}
-			continue
-		}
-		if name == "help" {
-			cl.help(cl.Stdout, args[1:])
-			if cl.Forward != nil {
-				cl.fwd([]byte("help\n"))
-			}
-			continue
-		}
-
-		m := cl.cmdMap
-		isRoot := true
-		cmdName := name
-
-	retry:
-		cmd, ok := m[cmdName]
-		if !ok && isRoot {
-			cmd, ok = cl.builtin[cmdName]
-		}
-		if !ok {
-			if iDot := strings.Index(cmdName, "."); iDot != -1 {
-				if cmd, ok = m[cmdName[:iDot]]; ok {
-					m = cmd.Map
-					if m != nil {
-						cmdName = cmdName[iDot+1:]
-						isRoot = false
-						goto retry
-					}
-				}
-			}
-			if cl.Forward != nil {
-				cl.fwd([]byte(rc.JoinCmd(args) + "\n"))
-			} else {
-				cl.setFnError(name, ErrNotFound)
-			}
-			continue
-		}
-		if cmd.Map != nil {
-			if cmd, ok = cmd.Map[""]; !ok {
-				cl.setFnError(name, ErrNotFound)
-				continue
-			}
-		}
-		if cmd.InitFlags != nil {
-			f := flag.NewFlagSet("", flag.ExitOnError)
-			cmd.InitFlags(f)
-			f.Parse(args[1:])
-			args = append(args[:1], f.Args()...)
-		}
-		n := len(args) - 1
-
-		nmin := 0
-		narg := len(cmd.Arg)
-		nopt := len(cmd.Opt)
-		if narg > 0 && cmd.Arg[narg-1] == "..." {
-			nmin = narg - 1
-			goto checkNMin
-		}
-		if nopt > 1 && cmd.Opt[nopt-1] == "..." {
-			nmin = narg
-			goto checkNMin
-		}
-		nmin = narg
-		if n > narg+nopt {
-			cl.setFnError(name, ErrWrongNArg)
-			continue
-		}
-	checkNMin:
-		if n < nmin {
-			cl.setFnError(name, ErrWrongNArg)
-			continue
-		}
-		if privEnv {
-			if !cmd.ignoreEnv {
-				cl.env.stack.Push(c.Assignments)
-			}
-		}
-		ictx.Writer = w
-		if cl.cmdHook != nil {
-			hc := &CmdHookContext{
-				Context:    ictx,
-				Name:       cmdName,
-				Cmd:        cmd,
-				Line:       c,
-				Writer:     ictx.Writer,
-				IsTopLevel: len(cl.inputStack) == 0,
-				IsCompound: cmd.isCompound,
-			}
-			if tw, ok := w.(text.Writer); ok {
-				if wr, ok := tw.(*writer); ok {
-					hc.IsRedirected = wr.redir
-				}
-			}
-			cl.cmdHook(hc)
-		}
-		if cl.flags.x && !cmd.Hidden && !cmd.isCompound {
-			cl.printCmd(c)
-		}
-		err = cmd.Fn(ictx, args)
-		select {
-		case <-ictx.Done():
-			if err == nil {
-				err = ErrInterrupt
-			}
-			ictx = nil
-		default:
-		}
-		if !cmd.weakStatus {
-			cl.lastOk = err == nil
-		}
-		cl.cur.cond.result = nil
-		if cmd.HideFailure {
-			err = nil
-		}
-		if privEnv {
-			cl.env.stack.Pop()
-		}
-		if err != nil {
-			if errors.Is(err, context.Canceled) || err == ErrInterrupt {
-				err = ErrInterrupt
-				cl.popStackAll()
-			}
-			cl.setFnError(name, err)
-		}
+		cl.evalCmdLine(ictx, cl.cur.w, c)
 	}
 	if cl.flags.e {
 		if !cl.lastOk {
@@ -952,6 +786,176 @@ func (cl *CmdLine) Process() error {
 		}
 	}
 	return nil
+}
+
+func (cl *CmdLine) evalCmdLine(ictx *icontext, w text.Writer, c *rc.CmdLine) {
+	var err error
+	if c.Redir.Type != "" {
+		w, err = cl.redirect(c.Redir.Type, c.Redir.Filename)
+		if err != nil {
+			cl.setFnError("", err)
+			return
+		}
+	}
+	args := c.Fields
+	if len(args) == 0 {
+		if a := c.Assignments; len(a) != 0 {
+			if cl.flags.x {
+				cl.printCmd(c)
+			}
+			cl.env.stack.Insert(a)
+			return
+		}
+		if cl.Forward != nil {
+			cl.fwd([]byte{'\n'})
+		}
+		return
+	}
+	privEnv := false
+	if len(c.Assignments) != 0 {
+		privEnv = true
+	}
+
+	name := args[0]
+	if body, ok := cl.funcMap[name]; ok {
+		if privEnv {
+			cl.env.stack.Push(c.Assignments)
+		}
+		cl.pushStringStack(body, w)
+		if privEnv {
+			cl.cur.popEnv = true
+		} else {
+			cl.cur.savedArgs = cl.env.stack.Get("*")
+		}
+		cl.env.stack.Set("*", args[1:])
+		cl.cur.isFunc = true
+		if cl.flags.x {
+			cl.printCmd(c)
+		}
+		return
+	}
+	if name == "help" {
+		cl.help(cl.Stdout, args[1:])
+		if cl.Forward != nil {
+			cl.fwd([]byte("help\n"))
+		}
+		return
+	}
+
+	m := cl.cmdMap
+	isRoot := true
+	cmdName := name
+
+retry:
+	cmd, ok := m[cmdName]
+	if !ok && isRoot {
+		cmd, ok = cl.builtin[cmdName]
+	}
+	if !ok {
+		if iDot := strings.Index(cmdName, "."); iDot != -1 {
+			if cmd, ok = m[cmdName[:iDot]]; ok {
+				m = cmd.Map
+				if m != nil {
+					cmdName = cmdName[iDot+1:]
+					isRoot = false
+					goto retry
+				}
+			}
+		}
+		if cl.Forward != nil {
+			cl.fwd([]byte(rc.JoinCmd(args) + "\n"))
+		} else {
+			cl.setFnError(name, ErrNotFound)
+		}
+		return
+	}
+	if cmd.Map != nil {
+		if cmd, ok = cmd.Map[""]; !ok {
+			cl.setFnError(name, ErrNotFound)
+			return
+		}
+	}
+	if cmd.InitFlags != nil {
+		f := flag.NewFlagSet("", flag.ExitOnError)
+		cmd.InitFlags(f)
+		f.Parse(args[1:])
+		args = append(args[:1], f.Args()...)
+	}
+	n := len(args) - 1
+
+	nmin := 0
+	narg := len(cmd.Arg)
+	nopt := len(cmd.Opt)
+	if narg > 0 && cmd.Arg[narg-1] == "..." {
+		nmin = narg - 1
+		goto checkNMin
+	}
+	if nopt > 1 && cmd.Opt[nopt-1] == "..." {
+		nmin = narg
+		goto checkNMin
+	}
+	nmin = narg
+	if n > narg+nopt {
+		cl.setFnError(name, ErrWrongNArg)
+		return
+	}
+checkNMin:
+	if n < nmin {
+		cl.setFnError(name, ErrWrongNArg)
+		return
+	}
+	if privEnv {
+		if !cmd.ignoreEnv {
+			cl.env.stack.Push(c.Assignments)
+		}
+	}
+	ictx.Writer = w
+	if cl.cmdHook != nil {
+		hc := &CmdHookContext{
+			Context:    ictx,
+			Name:       cmdName,
+			Cmd:        cmd,
+			Line:       c,
+			Writer:     ictx.Writer,
+			IsTopLevel: len(cl.inputStack) == 0,
+			IsCompound: cmd.isCompound,
+		}
+		if tw, ok := w.(text.Writer); ok {
+			if wr, ok := tw.(*writer); ok {
+				hc.IsRedirected = wr.redir
+			}
+		}
+		cl.cmdHook(hc)
+	}
+	if cl.flags.x && !cmd.Hidden && !cmd.isCompound {
+		cl.printCmd(c)
+	}
+	err = cmd.Fn(ictx, args)
+	select {
+	case <-ictx.Done():
+		if err == nil {
+			err = ErrInterrupt
+		}
+		ictx = nil
+	default:
+	}
+	if !cmd.weakStatus {
+		cl.lastOk = err == nil
+	}
+	cl.cur.cond.result = nil
+	if cmd.HideFailure {
+		err = nil
+	}
+	if privEnv {
+		cl.env.stack.Pop()
+	}
+	if err != nil {
+		if errors.Is(err, context.Canceled) || err == ErrInterrupt {
+			err = ErrInterrupt
+			cl.popStackAll()
+		}
+		cl.setFnError(name, err)
+	}
 }
 
 func (cl *CmdLine) fwd(line []byte) {
