@@ -127,6 +127,7 @@ type stringToken string
 type varRefToken struct {
 	stringToken
 	isCount bool
+	flat    bool
 }
 type assignmentToken struct {
 	stringListToken
@@ -328,6 +329,10 @@ func (tok *Tokenizer) expandEnv(t token) token {
 			case 1:
 				t.setString(value[0])
 			default:
+				if x.flat {
+					t.setString(strings.Join(value, " "))
+					break
+				}
 				t = &stringListToken{list: value}
 			}
 		} else if len(value) <= i {
@@ -565,6 +570,18 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 					return
 				}
 				ref.isCount = true
+				break
+			}
+			addField(i)
+			return
+		case '"':
+			if ref, ok := t.(*varRefToken); ok {
+				if ref.flat {
+					err = tokenSyntaxErr(r)
+					return
+				}
+				ref.flat = true
+				i0 = i
 				break
 			}
 			addField(i)
