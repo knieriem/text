@@ -1,6 +1,7 @@
 package rc
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -156,6 +157,52 @@ var tokenizeCmdTests = []testSpec{
 			"a", "b",
 		},
 		redir: Redirection{Type: "<", Filename: "c"},
+	}, {
+		input: "a=`{echo foo}",
+		assignments: EnvMap{
+			"a": {"foo"},
+		},
+	}, {
+		input:    "a=`{echo foo",
+		mustFail: true,
+	}, {
+		input: "a=`{echo foo}`{echo bar} b=`{echo bar baz} `{echo foo}",
+		fields: []string{
+			"foo",
+		},
+		assignments: EnvMap{
+			"a": {"foobar"},
+			"b": {"bar", "baz"},
+		},
+	}, {
+		input: "echo a=`{echo foo} `{echo bar}",
+		fields: []string{
+			"echo",
+			"a=foo",
+			"bar",
+		},
+	}, {
+		input: "a=`{echo foo `{echo ba}r} baz",
+		assignments: EnvMap{
+			"a": {"foo", "bar"},
+		},
+		fields: []string{
+			"baz",
+		},
+	}, {
+		input: "a=`{echo foo `{echo bar}} baz",
+		assignments: EnvMap{
+			"a": {"foo", "bar"},
+		},
+		fields: []string{
+			"baz",
+		},
+	}, {
+		input:    "a=`{echo foo `{echo bar} baz",
+		mustFail: true,
+	}, {
+		input:    "a=`echo foo `{echo bar} baz}",
+		mustFail: true,
 	},
 }
 
@@ -167,6 +214,17 @@ func TestTokenize(t *testing.T) {
 
 func TestTokenizeCmd(t *testing.T) {
 	tok := new(Tokenizer)
+	tok.Eval = func(c *CmdLine) string {
+		arg := c.Fields
+		if len(arg) == 0 {
+			return ""
+		}
+		switch arg[0] {
+		case "echo":
+			return strings.Join(arg[1:], " ")
+		}
+		return ""
+	}
 	for i, test := range append(commonTests, tokenizeCmdTests...) {
 		tok.Getenv = func(name string) []string {
 			if test.env != nil {

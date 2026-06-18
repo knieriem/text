@@ -3,9 +3,11 @@ package rc
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"unicode"
 )
 
@@ -25,6 +27,7 @@ func Tokenize(s string) []string {
 type Tokenizer struct {
 	buf    groupToken
 	Getenv func(string) []string
+	Eval   func(*CmdLine) string
 }
 
 type CmdLine struct {
@@ -95,11 +98,18 @@ func (tok *Tokenizer) ParseCmdLine(s string) (c *CmdLine, err error) {
 		c.Assignments = make(EnvMap, nAssign)
 		for _, t := range tokens[:nAssign] {
 			a := t.(*assignmentToken)
-			c.Assignments[a.name.String()] = []string{string(a.stringToken)[1:]}
+			c.Assignments[a.name.String()] = a.list
 		}
 		c.Fields = c.Fields[nAssign:]
 	}
 	return
+}
+
+func (tok *Tokenizer) clone() *Tokenizer {
+	t := new(Tokenizer)
+	t.Getenv = tok.Getenv
+	t.Eval = tok.Eval
+	return t
 }
 
 type token interface {
@@ -107,8 +117,9 @@ type token interface {
 	setString(string)
 }
 
-type stringAdder interface {
-	addString(string)
+type stringsReceiver interface {
+	fromList(*stringListToken)
+	copyTo(*stringListToken)
 }
 
 type groupToken []token
@@ -118,46 +129,95 @@ type varRefToken struct {
 	isCount bool
 }
 type assignmentToken struct {
-	stringToken
+	stringListToken
 	name token
 }
 type redirToken struct {
 	*stringToken
 }
 
+type evalToken struct {
+	open bool
+	stringToken
+}
+
 func (t assignmentToken) String() string {
-	return t.name.String() + string(t.stringToken)
+	return t.name.String() + "=" + t.join()
 }
 
 func (s *stringToken) setString(arg string) {
 	*s = stringToken(arg)
 }
+
 func (s *stringToken) addString(arg string) {
 	*s += stringToken(arg)
+}
+
+func (s *stringToken) fromList(t *stringListToken) {
+	*s = stringToken(t.join())
+}
+func (s *stringToken) copyTo(t *stringListToken) {
+	t.list = []string{string(*s)}
+}
+
+func (t *stringListToken) join() string {
+	return strings.Join(t.list, " ")
+}
+
+func (t *stringListToken) addStrings(list ...string) {
+	if t.list == nil {
+		t.list = make([]string, len(list))
+	}
+	if len(list) == len(t.list) {
+		for i, s := range t.list {
+			t.list[i] = s + list[i]
+		}
+	} else if len(list) == 1 {
+		for i, s := range t.list {
+			t.list[i] = s + list[0]
+		}
+	} else if len(t.list) == 1 {
+		t.list, list = list, t.list
+		for i, s := range t.list {
+			t.list[i] = list[0] + s
+		}
+	} else {
+		// ...
+	}
+}
+func (t *stringListToken) fromList(t2 *stringListToken) {
+	t.list = t2.list
+}
+func (t *stringListToken) copyTo(t2 *stringListToken) {
+	t2.list = t.list
 }
 
 func (s stringToken) String() string {
 	return string(s)
 }
 
-type stringListToken []string
+type stringListToken struct {
+	list []string
+}
 
-func (stringListToken) String() string   { return "<stringListToken>" }
-func (stringListToken) setString(string) {}
+func (t *stringListToken) String() string { return fmt.Sprintf("(%v)", t.join()) }
+func (t *stringListToken) setString(s string) {
+	t.list = []string{s}
+}
 
 func flattenStringLists(list groupToken) groupToken {
 	n := 0
 	for _, tok := range list {
-		if s, ok := tok.(stringListToken); ok {
-			n += len(s)
+		if t, ok := tok.(*stringListToken); ok {
+			n += len(t.list)
 		} else {
 			n += 1
 		}
 	}
 	dest := make(groupToken, 0, n)
 	for _, tok := range list {
-		if list, ok := tok.(stringListToken); ok {
-			for _, s := range list {
+		if t, ok := tok.(*stringListToken); ok {
+			for _, s := range t.list {
 				ts := new(stringToken)
 				ts.setString(s)
 				dest = append(dest, ts)
@@ -226,6 +286,16 @@ func (tok *Tokenizer) expandEnv(t token) token {
 		t = mergeStringTokens(x)
 	case *assignmentToken:
 		x.name = tok.expandEnv(x.name)
+	case *evalToken:
+		c, err := tok.clone().ParseCmdLine(string(x.stringToken))
+		if err != nil {
+			return nil
+		}
+		if tok.Eval == nil {
+			return nil
+		}
+		output := tok.Eval(c)
+		return &stringListToken{list: strings.Fields(output)}
 	case *varRefToken:
 		ref := x.String()[1:]
 		i := -1
@@ -258,7 +328,7 @@ func (tok *Tokenizer) expandEnv(t token) token {
 			case 1:
 				t.setString(value[0])
 			default:
-				t = stringListToken(value)
+				t = &stringListToken{list: value}
 			}
 		} else if len(value) <= i {
 			t.setString("")
@@ -270,26 +340,43 @@ func (tok *Tokenizer) expandEnv(t token) token {
 }
 
 func mergeStringTokens(list groupToken) token {
-	var prev stringAdder
+	var prev stringsReceiver
+	var buf *stringListToken
 	anyMerges := false
 
 	for i, t := range list {
-		if s, ok := t.(stringAdder); ok {
-			if prev == nil {
-				prev = s
+		if prev == nil {
+			if sr, ok := t.(stringsReceiver); ok {
+				prev = sr
+				buf = new(stringListToken)
+				sr.copyTo(buf)
 				continue
 			}
 		}
-		if s, ok := t.(*stringToken); ok {
-			prev.addString(string(*s))
+
+		if prev == nil {
+			continue
+		}
+
+		switch x := t.(type) {
+		case *stringToken:
+			buf.addStrings(string(*x))
 			anyMerges = true
 			list[i] = nil
-		} else {
+		case *stringListToken:
+			buf.addStrings(x.list...)
+			anyMerges = true
+			list[i] = nil
+		default:
+			prev.fromList(buf)
 			prev = nil
 		}
 	}
 	if !anyMerges {
 		return list
+	}
+	if prev != nil {
+		prev.fromList(buf)
 	}
 	dest := make(groupToken, 0, len(list))
 	for _, t := range list {
@@ -309,6 +396,8 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 		quoting = false
 		wasq    = false
 
+		evalDepth = 0
+
 		i0 = -1
 
 		countAssign = true
@@ -317,6 +406,9 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 		t token
 
 		setText = func(text string) {
+			if text == "" {
+				return
+			}
 			if t == nil {
 				if len(field) != 0 {
 					if st, ok := field[len(field)-1].(*stringToken); ok {
@@ -394,6 +486,36 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 			continue
 		}
 
+		if eval, ok := t.(*evalToken); ok {
+			if !eval.open {
+				if r != '{' {
+					err = tokenSyntaxErr(r)
+					return
+				}
+				i0 = i + 1
+				eval.open = true
+			}
+			if r == '`' {
+				tail := s[i+1:]
+				if len(tail) == 0 {
+					err = tokenSyntaxErr(r)
+					return
+				}
+				if c := tail[0]; c == '{' {
+					evalDepth++
+				}
+			}
+			if r == '}' {
+				if evalDepth == 0 {
+					flushToken(i)
+					i0 = i + 1
+				} else {
+					evalDepth--
+				}
+			}
+			continue
+		}
+
 		switch r {
 		case ' ', '\t', '\r', '\n':
 			addField(i)
@@ -447,10 +569,15 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 			}
 			addField(i)
 			return
+		case '`':
+			flushToken(i)
+			t = new(evalToken)
+
 		case '=':
 			if _, ok := t.(*assignmentToken); !ok && countAssign && !seenAssign && i0 != -1 {
 				seenAssign = true
 				flushToken(i)
+				i0 = i + 1
 				a := new(assignmentToken)
 				a.name = field
 				field = nil
@@ -469,6 +596,10 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 				i0 = i
 			}
 		}
+	}
+	if _, ok := t.(*evalToken); ok {
+		err = errors.New("missing closing }")
+		return
 	}
 	addField(len(s))
 	return
