@@ -45,6 +45,11 @@ var tokenizeTests = []testSpec{
 		fields: []string{
 			"a", "$mam$mal", "ea^ts a", "$nut",
 		},
+	}, {
+		input: "unclosed 'quote",
+		fields: []string{
+			"unclosed", "quote",
+		},
 	},
 }
 
@@ -74,6 +79,9 @@ var tokenizeCmdTests = []testSpec{
 		assignments: EnvMap{
 			"bar": {"fo:o"},
 		},
+	}, {
+		input:    "unclosed 'quote",
+		mustFail: true,
 	}, {
 		input: "#foo",
 	}, {

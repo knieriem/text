@@ -28,6 +28,8 @@ type Tokenizer struct {
 	buf    groupToken
 	Getenv func(string) []string
 	Eval   func(*CmdLine) string
+
+	mustCloseQuote bool
 }
 
 type CmdLine struct {
@@ -66,6 +68,7 @@ type Redirection struct {
 // has been set. Any assignments given at the front of a line are parsed into an EnvMap.
 // On success, a CmdLine structure is returned.
 func (tok *Tokenizer) ParseCmdLine(s string) (c *CmdLine, err error) {
+	tok.mustCloseQuote = true
 	tokens, nAssign, err := tok.do(s, true)
 	if err != nil {
 		return
@@ -613,6 +616,10 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 				i0 = i
 			}
 		}
+	}
+	if tok.mustCloseQuote && quoting {
+		err = errors.New("missing closing '")
+		return
 	}
 	if _, ok := t.(*evalToken); ok {
 		err = errors.New("missing closing }")
