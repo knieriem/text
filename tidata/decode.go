@@ -266,8 +266,8 @@ func (d *decoder) decodeStruct(dest reflect.Value, src Elem) {
 			// with the same key will be `combined', i.e. parsed
 			// into a single slice of values of the same type.
 			// This behaviour can be selected using the tag "combine",
-			// and it will be applied on default, if the field
-			// is a slice of structs, that don't implement
+			// and it will be applied by default, if the field
+			// is a slice of structs that don't implement
 			// a TextUnmarshaler.
 			combine := false
 			isSlice := v.Kind() == reflect.Slice
