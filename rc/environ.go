@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"maps"
 	"sort"
 )
 
@@ -12,9 +13,7 @@ type EnvMap map[string][]string
 
 // Insert copies all elements from src into m.
 func (m EnvMap) Insert(src EnvMap) {
-	for name, val := range src {
-		m[name] = val
-	}
+	maps.Copy(m, src)
 }
 
 type EnvStack []EnvMap
