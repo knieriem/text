@@ -587,8 +587,9 @@ func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssi
 				i0 = i
 				break
 			}
-			addField(i)
-			return
+			if i0 == -1 {
+				i0 = i
+			}
 		case '`':
 			flushToken(i)
 			t = new(evalToken)
