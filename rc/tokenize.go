@@ -21,11 +21,11 @@ import (
 // of the string, whitespace will not create a new field, and two
 // consecutive single quotes will result in one quote in the output.
 func Tokenize(s string) []string {
-	tokens, _, _ := new(Tokenizer).do(s, false)
+	tokens, _, _ := new(tokenizer).do(s, false)
 	return tokens.fields()
 }
 
-type Tokenizer struct {
+type tokenizer struct {
 	buf    groupToken
 	Getenv func(string) []string
 	yield  func(*EvalStep, error) bool
@@ -76,10 +76,10 @@ type EvalResult struct {
 type yieldAborted struct{}
 
 // parseCmdLine is similar to Tokenize in that  a string is separated into fields, and
-// quoted sections are recognized. It also expands variable references, if Tokenizer.Getenv
+// quoted sections are recognized. It also expands variable references, if tokenizer.Getenv
 // has been set. Any assignments given at the front of a line are parsed into an EnvMap.
 // On success, the provided CmdLine structure is filled.
-func (tok *Tokenizer) parseCmdLine(c *CmdLine, s string) error {
+func (tok *tokenizer) parseCmdLine(c *CmdLine, s string) error {
 	tok.mustCloseQuote = true
 	tokens, nAssign, err := tok.do(s, true)
 	if err != nil {
@@ -132,7 +132,7 @@ func (tok *Tokenizer) parseCmdLine(c *CmdLine, s string) error {
 // output to .Output. The main command, which depends on all sub-commands
 // being evaluated, is yielded last, with .Result set to nil.
 func EvalSteps(s string, getenv func(string) []string) iter.Seq2[*EvalStep, error] {
-	tok := new(Tokenizer)
+	tok := new(tokenizer)
 	tok.Getenv = getenv
 	return func(yield func(*EvalStep, error) bool) {
 		defer func() {
@@ -317,7 +317,7 @@ func dump(list groupToken, indent string) {
 var argrefRE = regexp.MustCompile("^[1-9][0-9]*$")
 var arridxRE = regexp.MustCompile(`\(([0-9]*)\)$`)
 
-func (tok *Tokenizer) expandEnv(t token) token {
+func (tok *tokenizer) expandEnv(t token) token {
 	switch x := t.(type) {
 	case groupToken:
 		for i, sub := range x {
@@ -438,7 +438,7 @@ func mergeStringTokens(list groupToken) token {
 	return dest
 }
 
-func (tok *Tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssign int, err error) {
+func (tok *tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssign int, err error) {
 	var (
 		field   groupToken
 		quoting = false
