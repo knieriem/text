@@ -5,4 +5,4 @@ require (
 	github.com/knieriem/g v0.1.2
 )
 
-go 1.13
+go 1.25.0

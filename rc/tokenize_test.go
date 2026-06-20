@@ -231,26 +231,32 @@ func TestTokenize(t *testing.T) {
 }
 
 func TestTokenizeCmd(t *testing.T) {
-	tok := new(Tokenizer)
-	tok.Eval = func(c *CmdLine) string {
-		arg := c.Fields
-		if len(arg) == 0 {
-			return ""
-		}
-		switch arg[0] {
-		case "echo":
-			return strings.Join(arg[1:], " ")
-		}
-		return ""
-	}
 	for i, test := range append(commonTests, tokenizeCmdTests...) {
-		tok.Getenv = func(name string) []string {
+		getenv := func(name string) []string {
 			if test.env != nil {
 				return test.env[name]
 			}
 			return testEnvMap[name]
 		}
-		cmd, err := tok.ParseCmdLine(test.input)
+		var cmd *CmdLine
+		var err error
+		for st, err1 := range EvalSteps(test.input, getenv) {
+			r := st.Result
+			if r == nil {
+				cmd = &st.Cmd
+				err = err1
+				break
+			}
+			arg := st.Cmd.Fields
+			if len(arg) == 0 {
+				continue
+			}
+			switch arg[0] {
+			case "echo":
+				r.Output = strings.Join(arg[1:], " ")
+				continue
+			}
+		}
 		if err != nil {
 			if !test.mustFail {
 				t.Error(err)

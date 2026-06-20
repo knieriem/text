@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"iter"
 	"regexp"
 	"strconv"
 	"strings"
@@ -27,7 +28,7 @@ func Tokenize(s string) []string {
 type Tokenizer struct {
 	buf    groupToken
 	Getenv func(string) []string
-	Eval   func(*CmdLine) string
+	yield  func(*EvalStep, error) bool
 
 	mustCloseQuote bool
 }
@@ -63,15 +64,26 @@ type Redirection struct {
 	Filename string
 }
 
-// ParseCmdLine is similar to Tokenize in that  a string is separated into fields, and
+type EvalStep struct {
+	Cmd    CmdLine
+	Result *EvalResult
+}
+
+type EvalResult struct {
+	Output string
+}
+
+type yieldAborted struct{}
+
+// parseCmdLine is similar to Tokenize in that  a string is separated into fields, and
 // quoted sections are recognized. It also expands variable references, if Tokenizer.Getenv
 // has been set. Any assignments given at the front of a line are parsed into an EnvMap.
-// On success, a CmdLine structure is returned.
-func (tok *Tokenizer) ParseCmdLine(s string) (c *CmdLine, err error) {
+// On success, the provided CmdLine structure is filled.
+func (tok *Tokenizer) parseCmdLine(c *CmdLine, s string) error {
 	tok.mustCloseQuote = true
 	tokens, nAssign, err := tok.do(s, true)
 	if err != nil {
-		return
+		return err
 	}
 	if false {
 		fmt.Printf("TokenizeCmd: %q\n", s)
@@ -94,7 +106,6 @@ func (tok *Tokenizer) ParseCmdLine(s string) (c *CmdLine, err error) {
 	}
 	tokens = flattenStringLists(tokens)
 
-	c = new(CmdLine)
 	c.Fields = tokens.fields()
 	c.Redir = tokens.redirection()
 	if nAssign != 0 {
@@ -105,14 +116,39 @@ func (tok *Tokenizer) ParseCmdLine(s string) (c *CmdLine, err error) {
 		}
 		c.Fields = c.Fields[nAssign:]
 	}
-	return
+	return nil
 }
 
-func (tok *Tokenizer) clone() *Tokenizer {
-	t := new(Tokenizer)
-	t.Getenv = tok.Getenv
-	t.Eval = tok.Eval
-	return t
+// EvalSteps returns an Iterator that yields the [CmdLine] (wrapped
+// into an [EvalStep]) parsed from the provided command line string,
+// and also [CmdLine]s for all sub-commands
+// within Plan 9 rc-style `{command} syntax.
+// The parsing uses the same algorithm as [Tokenize].
+// In addition, variable references are expanded, if getenv is non-nil.
+// Any assignments given at the front of a line are parsed into
+// the [*CmdLine]'s [.EnvMap].
+// The sub-commands are yielded first, with .Result set to a
+// [EvalResult] value, so that caller can evaluate the command and assign its
+// output to .Output. The main command, which depends on all sub-commands
+// being evaluated, is yielded last, with .Result set to nil.
+func EvalSteps(s string, getenv func(string) []string) iter.Seq2[*EvalStep, error] {
+	tok := new(Tokenizer)
+	tok.Getenv = getenv
+	return func(yield func(*EvalStep, error) bool) {
+		defer func() {
+			if r := recover(); r != nil {
+				if _, ok := r.(yieldAborted); ok {
+					return
+				}
+				panic(r)
+			}
+		}()
+
+		tok.yield = yield
+		var st EvalStep
+		err := tok.parseCmdLine(&st.Cmd, s)
+		yield(&st, err)
+	}
 }
 
 type token interface {
@@ -290,16 +326,20 @@ func (tok *Tokenizer) expandEnv(t token) token {
 		t = mergeStringTokens(x)
 	case *assignmentToken:
 		x.name = tok.expandEnv(x.name)
+
 	case *evalToken:
-		c, err := tok.clone().ParseCmdLine(string(x.stringToken))
-		if err != nil {
+		var st EvalStep
+		err := tok.parseCmdLine(&st.Cmd, string(x.stringToken))
+		if tok.yield == nil {
 			return nil
 		}
-		if tok.Eval == nil {
-			return nil
+		var r EvalResult
+		st.Result = &r
+		if !tok.yield(&st, err) {
+			panic(yieldAborted{})
 		}
-		output := tok.Eval(c)
-		return &stringListToken{list: strings.Fields(output)}
+		return &stringListToken{list: strings.Fields(r.Output)}
+
 	case *varRefToken:
 		ref := x.String()[1:]
 		i := -1
