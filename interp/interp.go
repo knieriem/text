@@ -195,6 +195,9 @@ func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
 	cl.cmdLineReader = newCmdLineReader(s, nil)
 	cl.cur.lineReader = cl.cmdLineReader
 	cl.funcMap = make(map[string]string)
+	if m == nil {
+		m = CmdMap{}
+	}
 	cl.cmdMap = m
 	cl.builtin = CmdMap{
 		".": {
