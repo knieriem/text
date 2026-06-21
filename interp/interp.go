@@ -467,6 +467,9 @@ a single command, or a block enclosed in '{' and '}':
 		return os.Open(filename)
 	}
 	cl.OpenRedirFile = func(name string, flag int, perm os.FileMode) (RedirFile, error) {
+		if name == "/dev/null" {
+			return discardingFile{}, nil
+		}
 		return os.OpenFile(name, flag, perm)
 	}
 	cl.WritePrompt = func(prompt string) error {
@@ -493,6 +496,13 @@ a single command, or a block enclosed in '{' and '}':
 	cl.lastOk = true
 	return cl
 }
+
+type discardingFile struct{}
+
+func (discardingFile) Close() error                                 { return nil }
+func (discardingFile) Write(b []byte) (int, error)                  { return io.Discard.Write(b) }
+func (discardingFile) Seek(offset int64, whence int) (int64, error) { return 0, nil }
+func (discardingFile) Truncate(int64) error                         { return nil }
 
 func extractWriter(ctx Context) text.Writer {
 	return ctx.(*icontext).Writer
