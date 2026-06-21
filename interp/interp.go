@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"iter"
 	"os"
 	"path"
 	"sort"
@@ -67,7 +68,6 @@ type CmdLine struct {
 	inputStack  []stackEntry
 	lastOk      bool
 	savedPrompt string
-	tok         *rc.Tokenizer
 	env         *Env
 	tplMap      *templateMap
 
@@ -480,16 +480,12 @@ a single command, or a block enclosed in '{' and '}':
 		fmt.Fprintln(cl.errOut, err)
 	}
 	cl.cIntr = make(chan struct{})
-	cl.tok = new(rc.Tokenizer)
 
 	for _, option := range opts {
 		option(cl)
 	}
 	if cl.env == nil {
 		cl.env = NewEnv()
-	}
-	cl.tok.Getenv = func(key string) []string {
-		return cl.env.stack.Get(key)
 	}
 	cl.lastOk = true
 	return cl
@@ -554,6 +550,7 @@ func (cl *CmdLine) Interrupt(timeout time.Duration) (ok bool) {
 
 type stackEntry struct {
 	lineReader *cmdLineReader
+	eval       *evalState
 	repetition *repetition
 	rewind     func() io.ReadCloser
 
@@ -566,6 +563,14 @@ type stackEntry struct {
 		cmd    string
 		result *bool
 	}
+}
+
+type evalState struct {
+	next   func() (*rc.EvalStep, error, bool)
+	stop   func()
+	buf    *bytes.Buffer
+	saveW  text.Writer
+	result *rc.EvalResult
 }
 
 func (stk *stackEntry) isLoop() bool {
@@ -689,7 +694,8 @@ func (cl *CmdLine) Process() error {
 
 	cl.tplMap = newTemplateMap(16)
 	cl.cur.w = cl.newWriter(cl.Stdout)
-	ready := make(chan bool)
+	readyC := make(chan bool)
+	ready := readyC
 
 	defer cl.cleanup()
 
@@ -702,10 +708,15 @@ func (cl *CmdLine) Process() error {
 		if cl.exitFlag {
 			break
 		}
-		cl.WritePrompt(cl.Prompt)
-		go func() {
-			ready <- cl.Scan()
-		}()
+		if cl.cur.eval != nil {
+			ready = nil
+		} else {
+			ready = readyC
+			cl.WritePrompt(cl.Prompt)
+			go func() {
+				ready <- cl.Scan()
+			}()
+		}
 		scanOk := false
 	selAgain:
 		if ictx == nil {
@@ -732,6 +743,32 @@ func (cl *CmdLine) Process() error {
 			}
 		default:
 		}
+
+		w := cl.cur.w
+		if eval := cl.cur.eval; eval != nil {
+			eval.result.Output = eval.buf.String()
+			st, err, ok := cl.cur.eval.next()
+			if !ok {
+				panic("should never happen")
+			}
+
+			if err != nil {
+				cl.setFnError("", err)
+				eval.stop()
+				cl.cur.eval = nil
+				continue
+			}
+			eval.result = st.Result
+			if st.Result == nil {
+				eval.stop()
+				cl.cur.eval = nil
+			} else {
+				w, eval.buf = newBufWriter()
+			}
+			cl.evalCmdLine(ictx, w, &st.Cmd)
+			continue
+		}
+
 		select {
 		case <-ictx.Done():
 			ictx = nil
@@ -773,12 +810,31 @@ func (cl *CmdLine) Process() error {
 				goto again
 			}
 		}
-		c, err := cl.tok.ParseCmdLine(line)
+
+		next, stop := iter.Pull2(rc.EvalSteps(line, cl.env.stack.Get))
+		st, err, ok := next()
+		if !ok {
+			panic("oops")
+		}
 		if err != nil {
 			cl.setFnError("", err)
+			stop()
 			continue
 		}
-		cl.evalCmdLine(ictx, cl.cur.w, c)
+		r := st.Result
+		if r != nil {
+			bw, b := newBufWriter()
+			w = bw
+			cl.cur.eval = &evalState{
+				next:   next,
+				stop:   stop,
+				buf:    b,
+				result: r,
+			}
+		} else {
+			stop()
+		}
+		cl.evalCmdLine(ictx, w, &st.Cmd)
 	}
 	if cl.flags.e {
 		if !cl.lastOk {
@@ -936,7 +992,6 @@ checkNMin:
 		if err == nil {
 			err = ErrInterrupt
 		}
-		ictx = nil
 	default:
 	}
 	if !cmd.weakStatus {
@@ -1226,6 +1281,17 @@ func (cl *CmdLine) newWriter(w io.Writer) *writer {
 			return b.String()
 		},
 	}
+}
+
+func newBufWriter() (text.Writer, *bytes.Buffer) {
+	b := new(bytes.Buffer)
+	w := &writer{
+		Writer:   b,
+		fieldSep: func() string { return " " },
+		prefix:   func() string { return "" },
+		redir:    true,
+	}
+	return w, b
 }
 
 func (w *writer) Printf(format string, arg ...interface{}) (n int, err error) {
