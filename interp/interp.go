@@ -989,10 +989,8 @@ checkNMin:
 			IsTopLevel: len(cl.inputStack) == 0,
 			IsCompound: cmd.isCompound,
 		}
-		if tw, ok := w.(text.Writer); ok {
-			if wr, ok := tw.(*writer); ok {
-				hc.IsRedirected = wr.redir
-			}
+		if wr, ok := w.(*writer); ok {
+			hc.IsRedirected = wr.redir
 		}
 		cl.cmdHook(hc)
 	}
