@@ -922,15 +922,24 @@ retry:
 	}
 	if !ok {
 		if iDot := strings.Index(cmdName, "."); iDot != -1 {
-			if cmd, ok = m[cmdName[:iDot]]; ok {
-				m = cmd.Map
-				if m != nil {
-					cmdName = cmdName[iDot+1:]
-					isRoot = false
-					goto retry
+			key := cmdName[:iDot]
+			if cmd, ok = m[key]; !ok {
+				if !isRoot {
+					goto skip
+				}
+				cmd, ok = cl.builtin[key]
+				if !ok {
+					goto skip
 				}
 			}
+			m = cmd.Map
+			if m != nil {
+				cmdName = cmdName[iDot+1:]
+				isRoot = false
+				goto retry
+			}
 		}
+	skip:
 		if cl.Forward != nil {
 			cl.fwd([]byte(rc.JoinCmd(args) + "\n"))
 		} else {
