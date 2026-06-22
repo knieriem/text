@@ -1,0 +1,23 @@
+Test variables and per-command assignments
+
+-- input --
+FOO=bar
+echo top: $FOO
+
+fn myfunc {
+	echo $1.myfunc: $FOO
+}
+
+myfunc top
+
+FOO=temporary echo override: $FOO
+
+FOO=temporary myfunc override
+
+echo $FOO
+-- stdout --
+top: bar
+top.myfunc: bar
+override: bar
+override.myfunc: temporary
+bar

@@ -1,0 +1,32 @@
+Basic tests
+
+-- input --
+echo foo
+
+fn f {
+	echo	f: $1
+
+	if ~ $#* 1 {
+		echo f: $1^bar
+		return
+	}
+	echo f: $#* | $*
+	echo 'f[2]': $2
+}
+
+f foo
+f 1 2 3 4
+
+fn h echo hello
+
+h
+
+-- stdout --
+foo
+f: foo
+f: foobar
+f: 1
+f: 4 | 1 2 3 4
+f[2]: 2
+hello
+-- stderr --

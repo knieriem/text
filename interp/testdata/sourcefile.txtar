@@ -1,0 +1,24 @@
+Include files via the '.' command.
+
+-- meta --
+mustFail: true
+
+-- input --
+. foo
+echo $x
+. 404
+
+-- foo --
+echo foo
+x=baz
+. bar
+
+-- bar --
+echo bar
+
+-- stdout --
+foo
+bar
+baz
+-- stderr --
+.: open 404: file does not exist

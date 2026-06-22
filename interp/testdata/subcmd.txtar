@@ -1,0 +1,10 @@
+Test nested sub-command expressions
+
+-- input --
+h=`{echo foo hello}
+
+echo hello `{echo world}
+echo $h(2) `{echo wo`{echo rld}}
+-- stdout --
+hello world
+hello world

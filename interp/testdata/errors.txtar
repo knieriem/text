@@ -1,0 +1,26 @@
+Test that invoking a missing command yields errors properly
+
+-- meta --
+mustFail: true
+
+-- input --
+echo starting
+thisCommandDoesNotExist arg1 arg2
+echo completed
+
+# set -e flag to exit after a command failed
+flag e +
+
+echo starting2
+foo arg1 arg2
+
+# this line must not be executed anymore
+echo completed2
+
+-- stdout --
+starting
+completed
+starting2
+-- stderr --
+thisCommandDoesNotExist: no such command
+foo: no such command
