@@ -453,6 +453,7 @@ a single command, or a block enclosed in '{' and '}':
 			},
 			Help: "Terminate the command line processor.",
 		},
+		"expr":   &expr,
 	}
 	if _, ok := m["builtin"]; !ok {
 		m["builtin"] = &Cmd{
