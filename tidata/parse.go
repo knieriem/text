@@ -175,7 +175,7 @@ func (r *Reader) handleLevel(inCh <-chan input, ret chan<- []Elem) {
 				t = t[ic[2]:ic[3]]
 			}
 		}
-		t = strings.TrimSpace(t)
+		t = strings.Trim(t, "\t ")
 		list = append(list, Elem{Text: t, LineNum: in.lineNum})
 		el = &list[len(list)-1]
 	}
