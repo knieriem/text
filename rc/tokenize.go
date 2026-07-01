@@ -270,11 +270,12 @@ func flattenStringLists(list groupToken) groupToken {
 	return dest
 }
 
-func (list groupToken) String() (s string) {
+func (list groupToken) String() string {
+	var sb strings.Builder
 	for _, tok := range list {
-		s += tok.String()
+		sb.WriteString(tok.String())
 	}
-	return
+	return sb.String()
 }
 func (groupToken) setString(_ string) {}
 
