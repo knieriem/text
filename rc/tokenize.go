@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"iter"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -390,8 +391,6 @@ func (tok *tokenizer) expandEnv(t token) token {
 func mergeStringTokens(list groupToken) token {
 	var prev stringsReceiver
 	var buf *stringListToken
-	anyMerges := false
-
 	for i, t := range list {
 		if prev == nil {
 			if sr, ok := t.(stringsReceiver); ok {
@@ -409,33 +408,25 @@ func mergeStringTokens(list groupToken) token {
 		switch x := t.(type) {
 		case *stringToken:
 			buf.addStrings(string(*x))
-			anyMerges = true
 			list[i] = nil
 		case *stringListToken:
 			buf.addStrings(x.list...)
-			anyMerges = true
 			list[i] = nil
 		default:
 			prev.fromList(buf)
 			prev = nil
 		}
 	}
-	if !anyMerges {
-		return list
-	}
 	if prev != nil {
 		prev.fromList(buf)
 	}
-	dest := make(groupToken, 0, len(list))
-	for _, t := range list {
-		if t != nil {
-			dest = append(dest, t)
-		}
+	list = slices.DeleteFunc(list, func(t token) bool {
+		return t == nil
+	})
+	if len(list) == 1 {
+		return list[0]
 	}
-	if len(dest) == 1 {
-		return dest[0]
-	}
-	return dest
+	return list
 }
 
 func (tok *tokenizer) do(s string, handleSpecial bool) (fields groupToken, nAssign int, err error) {
