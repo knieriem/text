@@ -64,6 +64,11 @@ var tokenizeCmdTests = []testSpec{
 			"baz": {"foo"},
 		},
 	}, {
+		// this failure should be aligned better with Plan 9 rc's behaviour
+		input:    "$foo=ba'z' b$ar=$ba^o $bar",
+		env:      EnvMap{},
+		mustFail: true,
+	}, {
 		input: "$foo=ba'z' b#foo",
 		fields: []string{
 			"b",
@@ -229,6 +234,13 @@ var tokenizeCmdTests = []testSpec{
 	},
 }
 
+var bugsFoundByFuzz = []testSpec{
+	{
+		input:    "0= ^=",
+		mustFail: true,
+	},
+}
+
 func TestTokenize(t *testing.T) {
 	for i, test := range append(commonTests, tokenizeTests...) {
 		compareStringSlices(t, test.fields, Tokenize(test.input), "field", i)
@@ -236,7 +248,9 @@ func TestTokenize(t *testing.T) {
 }
 
 func TestTokenizeCmd(t *testing.T) {
-	for i, test := range append(commonTests, tokenizeCmdTests...) {
+	tests := append(commonTests, tokenizeCmdTests...)
+	tests = append(tests, bugsFoundByFuzz...)
+	for i, test := range tests {
 		getenv := func(name string) []string {
 			if test.env != nil {
 				return test.env[name]
@@ -302,4 +316,34 @@ func compareStringSlices(t *testing.T, want, have []string, context string, iTes
 			return
 		}
 	}
+}
+
+func FuzzEvalSteps(f *testing.F) {
+	for _, test := range append(commonTests, tokenizeCmdTests...) {
+		f.Add(test.input)
+	}
+	f.Fuzz(func(t *testing.T, input string) {
+		defer func() {
+			if r := recover(); r != nil {
+				f.Failed()
+				t.Errorf("fuzzing %q: %v", input, r)
+				panic(r)
+			}
+		}()
+		for st, _ := range EvalSteps(input, nil) {
+			r := st.Result
+			if r == nil {
+				break
+			}
+			arg := st.Cmd.Fields
+			if len(arg) == 0 {
+				continue
+			}
+			switch arg[0] {
+			case "echo":
+				r.Output = strings.Join(arg[1:], " ")
+				continue
+			}
+		}
+	})
 }

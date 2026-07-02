@@ -108,9 +108,16 @@ func (tok *tokenizer) parseCmdLine(c *CmdLine, s string) error {
 	c.Fields = tokens.fields()
 	c.Redir = tokens.redirection()
 	if nAssign != 0 {
+		if nAssign > cap(tokens) {
+			return fmt.Errorf("internal error: nAssign exceeds number of tokens")
+		}
+
 		c.Assignments = make(EnvMap, nAssign)
 		for _, t := range tokens[:nAssign] {
-			a := t.(*assignmentToken)
+			a, ok := t.(*assignmentToken)
+			if !ok {
+				return fmt.Errorf("internal error: token is not an assignmentToken")
+			}
 			c.Assignments[a.name.String()] = a.list
 		}
 		c.Fields = c.Fields[nAssign:]
