@@ -21,6 +21,9 @@ fn h echo hello
 
 h
 
+printf 'fmt %02x %.2f %q %s\n' 10 1.666 abc "def"
+printf "a\tb\nc%d\n" 1
+
 -- stdout --
 foo
 f: foo
@@ -29,4 +32,7 @@ f: 1
 f: 4 | 1 2 3 4
 f[2]: 2
 hello
+fmt 0a 1.67 "abc" def
+a	b
+c1
 -- stderr --

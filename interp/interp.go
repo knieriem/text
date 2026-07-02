@@ -226,6 +226,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
 			},
 			Help: "Print arguments.",
 		},
+		"printf": &cmdPrintf,
 		"cat": {
 			Arg: []string{"FILE"},
 			Fn: func(w Context, arg []string) (err error) {
