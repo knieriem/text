@@ -1,0 +1,129 @@
+testing for loops
+
+-- input --
+
+for i in 3..9 {
+	echo _$i
+}
+
+for r in 7..9 10..12 {
+	for i in $r {
+		echo __$i
+	}
+}
+
+retearly=0
+
+fn a {
+	for i in $1...2 {
+		echo $i
+		$break
+		if ~ $retearly 1 {
+			return
+		}
+	}
+}
+
+i=foo
+
+for i in a b c {
+	echo $i `{a -2}
+}
+
+echo $i
+
+# Test whether the $i value at top level is restored properly
+# when returning from function 'a'
+retearly=1
+a 0
+echo $i
+
+# Test whether the $i value at top level is restored properly
+# when calling break in function 'a'
+break=break
+a -10
+echo $i
+
+echo ----
+repeat 3 echo a
+for 2 echo b
+echo ----
+
+i=3
+for {
+	echo $i
+	i=`{expr $i - 1}
+	if ~ $i 0 {
+		break
+	}
+}
+
+for n in 2.. {
+	echo $n
+	if ~ $n 5 {
+		break
+	}
+}
+
+# test "for var in _list_"
+list=`{echo foo bar}
+for s in $list baz {
+	echo s=$s
+}
+
+fn b {
+	echo $s
+}
+for s in $list b
+
+# test durations
+d=50ms
+for 200ms {
+	echo $d
+	sleep $d
+	d=`{expr $d * 4}
+}
+
+-- stdout --
+_3
+_4
+_5
+_6
+_7
+_8
+_9
+__7
+__8
+__9
+__10
+__11
+__12
+a -2 -1 0 1
+b -2 -1 0 1
+c -2 -1 0 1
+foo
+0
+foo
+-10
+foo
+----
+a
+a
+a
+b
+b
+----
+3
+2
+1
+2
+3
+4
+5
+s=foo
+s=bar
+s=baz
+foo
+bar
+50ms
+200ms

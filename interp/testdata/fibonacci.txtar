@@ -10,10 +10,8 @@ fn fib {
 	expr `{fib `{expr $1 - 1}} + `{fib `{expr $1 - 2}}
 }
 
-i=0
-repeat 18 {
+for i in ...18 {
 	echo $i: `{fib $i}
-	i=`{expr $i + 1}
 }
 
 -- stdout --

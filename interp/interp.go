@@ -399,13 +399,49 @@ a single command, or a block enclosed in '{' and '}':
 			},
 			Help: "Unbind a function.",
 		},
+		"for": {
+			Arg: []string{"ARG", "..."},
+			Fn: func(ctx Context, arg []string) error {
+				return cl.repeatCmd(extractWriter(ctx), arg[1:])
+			},
+			Help: `A for loop may be constructed in one of these ways:
+
+	for {
+		# commands
+	}
+	Repeat the loop body continuously.
+
+	for N CmdOrBlock
+		Repeat a command N times.
+
+	for DURATION CmdOrBlock
+		Repeat a command for a specified duration.
+
+	for VAR in LIST CmdOrBlock
+		Loop over each element of LIST, updating VAR correspondingly,
+		and execute the command (or block) at each loop run.
+
+	for VAR in RANGE CmdOrBlock
+		Repeat a command as often as defined by the RANGE expression,
+		updating VAR to the current value.
+		RANGE may be
+			inclusive: [i0] ".." [n-1]    (e.g. -2..4 => -2 -1 0 1 2 3)
+			exclusive: [i0] "..." [n]     (e.g. ...3  => 0 1 2)
+
+		The start index may be ommitted, defaulting to 0.
+		The end index may be ommitted, resulting in an unbounded loop.
+
+	CmdOrBlock can be either a simple command, or a "{" starting a
+	loop body block, similar as in a function definition.`,
+		},
 		"repeat": {
 			Arg: []string{"{N|T}", "CMD"},
 			Opt: []string{"ARG", "..."},
 			Fn: func(ctx Context, arg []string) error {
 				return cl.repeatCmd(extractWriter(ctx), arg[1:])
 			},
-			Help: "Repeat a command N times, or for a specified duration T.",
+			Help:   "Repeat a command N times, or for a specified duration T.",
+			Hidden: true,
 		},
 		"return": {
 			Fn: func(_ Context, _ []string) error {
@@ -612,6 +648,7 @@ func (cl *CmdLine) pushStringStack(cmds string, w text.Writer) {
 }
 
 func (cl *CmdLine) popStack() {
+	cl.cur.repetition.restoreEnv()
 	if cl.cur.popEnv {
 		cl.env.stack.Pop()
 	}
@@ -1096,13 +1133,37 @@ func (cl *CmdLine) ParseCmd(f []string) (cmd string, err error) {
 }
 
 type repetition struct {
-	n   int
-	end time.Time
+	incr struct {
+		varName string
+		setEnv  func(name string, value []string)
+		saved   []string
+		value   int
+		list    []string
+	}
+	unbounded bool
+	n         int
+	end       time.Time
 }
 
 func (r *repetition) done() bool {
 	if r == nil {
 		return true
+	}
+	if name := r.incr.varName; name != "" {
+		r.incr.value++
+		i := r.incr.value
+		s := ""
+		if list := r.incr.list; list != nil {
+			if i < len(list) {
+				s = list[i]
+			}
+		} else {
+			s = strconv.Itoa(r.incr.value)
+		}
+		r.incr.setEnv(name, []string{s})
+	}
+	if r.unbounded {
+		return false
 	}
 	if r.n > 1 {
 		r.n--
@@ -1116,33 +1177,108 @@ func (r *repetition) done() bool {
 	return true
 }
 
-func (cl *CmdLine) repeatCmd(w text.Writer, arg []string) (err error) {
+func (r *repetition) restoreEnv() {
+	if r == nil {
+		return
+	}
+	if r.incr.varName == "" {
+		return
+	}
+	r.incr.setEnv(r.incr.varName, r.incr.saved)
+}
+
+func (cl *CmdLine) repeatCmd(w text.Writer, arg []string) error {
 	var i uint64
 	var d time.Duration
+	var err error
 
-	d, err = time.ParseDuration(arg[0])
-	if err != nil {
-		i, err = strconv.ParseUint(arg[0], 10, 0)
-		if err != nil {
-			return
+	r := new(repetition)
+	if arg[0] == "{" {
+		r.unbounded = true
+	} else {
+		if len(arg) > 3 && arg[1] == "in" {
+			r.incr.varName = arg[0]
+			r.incr.setEnv = cl.env.stack.Set
+			r.incr.saved = cl.env.stack.Get(r.incr.varName)
+
+			rangeExt := 0
+			f := strings.Split(arg[2], "...")
+
+			iLast := len(arg) - 1
+			if arg[iLast] == "{" {
+				if iLast > 3 {
+					goto rangeList
+				}
+			}
+			switch len(f) {
+			case 1:
+				f = strings.Split(arg[2], "..")
+				if len(f) != 2 {
+					goto rangeList
+				}
+				rangeExt = 1
+				fallthrough
+
+			case 2:
+				var i0, iEnd int
+				if f[0] != "" {
+					i, err := strconv.ParseInt(f[0], 0, 0)
+					if err != nil {
+						goto rangeList
+					}
+					i0 = int(i)
+				}
+				if f[1] == "" {
+					r.unbounded = true
+				} else {
+					i, err := strconv.ParseInt(f[1], 0, 0)
+					if err != nil {
+						goto rangeList
+					}
+					iEnd = int(i)
+				}
+				r.n = iEnd - i0 + rangeExt
+				r.incr.value = i0
+				r.incr.setEnv(arg[0], []string{strconv.Itoa(i0)})
+				arg = arg[3:]
+				goto parseCmd
+			}
+		rangeList:
+			r.incr.list = arg[2:iLast]
+			r.incr.setEnv(arg[0], []string{arg[2]})
+			r.n = len(r.incr.list)
+			arg = arg[iLast:]
+			goto parseCmd
 		}
+		d, err = time.ParseDuration(arg[0])
+		if err != nil {
+			d = 0
+			i, err = strconv.ParseUint(arg[0], 10, 0)
+			if err != nil {
+				return err
+			}
+		}
+		if i == 0 && d == 0 {
+			return nil
+		}
+		arg = arg[1:]
 	}
-	if i == 0 && d == 0 {
-		return
-	}
-	cmd, err := cl.ParseCmd(arg[1:])
+parseCmd:
+	cmd, err := cl.ParseCmd(arg)
 	if err != nil {
-		return
+		return err
 	}
 	rewind := func() io.ReadCloser {
 		return ioutil.NopCloser(strings.NewReader(cmd))
 	}
-	r := &repetition{
-		n:   int(i),
-		end: time.Now().Add(d),
+	if i != 0 {
+		r.n = int(i)
+	}
+	if d != 0 {
+		r.end = time.Now().Add(d)
 	}
 	cl.pushStack(rewind(), r, rewind, w)
-	return
+	return nil
 
 }
 
