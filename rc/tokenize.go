@@ -90,21 +90,19 @@ func (tok *tokenizer) parseCmdLine(c *CmdLine, s string) error {
 		fmt.Printf("TokenizeCmd: %q\n", s)
 		dump(tokens, "	")
 	}
-	if tok.Getenv != nil {
-		for i, t := range tokens {
-			tokens[i] = tok.expandEnv(t)
-		}
-		// filter out nil tokens
-		iw := 0
-		for _, t := range tokens {
-			if t == nil {
-				continue
-			}
-			tokens[iw] = t
-			iw++
-		}
-		tokens = tokens[:iw]
+	for i, t := range tokens {
+		tokens[i] = tok.expandEnv(t)
 	}
+	// filter out nil tokens
+	iw := 0
+	for _, t := range tokens {
+		if t == nil {
+			continue
+		}
+		tokens[iw] = t
+		iw++
+	}
+	tokens = tokens[:iw]
 	tokens = flattenStringLists(tokens)
 
 	c.Fields = tokens.fields()
@@ -134,6 +132,9 @@ func (tok *tokenizer) parseCmdLine(c *CmdLine, s string) error {
 // being evaluated, is yielded last, with .Result set to nil.
 func EvalSteps(s string, getenv func(string) []string) iter.Seq2[*EvalStep, error] {
 	tok := new(tokenizer)
+	if getenv == nil {
+		getenv = func(s string) []string { return nil }
+	}
 	tok.Getenv = getenv
 	return func(yield func(*EvalStep, error) bool) {
 		defer func() {
