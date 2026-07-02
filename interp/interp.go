@@ -1300,7 +1300,10 @@ retry:
 		if cmdName != "" {
 			if name == cmdName {
 				if v.Map != nil {
-					pfx.WriteString(cmdName + ".")
+					if pfx.Len() != 0 || cmdName != "builtin" {
+						pfx.WriteString(cmdName)
+						pfx.WriteByte('.')
+					}
 					cmdName = ""
 					isDir = true
 					m = v.Map
@@ -1317,7 +1320,9 @@ retry:
 			if v.Map == nil {
 				continue
 			}
-			pfx.WriteString(cmdName[:iDot+1])
+			if pfx.Len() != 0 || cmdName[:iDot] != "builtin" {
+				pfx.WriteString(cmdName[:iDot+1])
+			}
 			cmdName = cmdName[iDot+1:]
 			m = v.Map
 			goto retry
