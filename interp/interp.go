@@ -818,7 +818,7 @@ func (cl *CmdLine) Process() error {
 			} else {
 				w, eval.buf = newBufWriter()
 			}
-			cl.evalCmdLine(ictx, w, &st.Cmd)
+			cl.evalCmdLine(&ictx, w, &st.Cmd)
 			continue
 		}
 
@@ -887,7 +887,7 @@ func (cl *CmdLine) Process() error {
 		} else {
 			stop()
 		}
-		cl.evalCmdLine(ictx, w, &st.Cmd)
+		cl.evalCmdLine(&ictx, w, &st.Cmd)
 	}
 	if cl.flags.e {
 		if !cl.lastOk {
@@ -897,7 +897,7 @@ func (cl *CmdLine) Process() error {
 	return nil
 }
 
-func (cl *CmdLine) evalCmdLine(ictx *icontext, w text.Writer, c *rc.CmdLine) {
+func (cl *CmdLine) evalCmdLine(pictx **icontext, w text.Writer, c *rc.CmdLine) {
 	var err error
 	if c.Redir.Type != "" {
 		w, err = cl.redirect(c.Redir.Type, c.Redir.Filename)
@@ -1027,6 +1027,7 @@ checkNMin:
 			cl.env.stack.Push(c.Assignments)
 		}
 	}
+	ictx := *pictx
 	ictx.Writer = w
 	if cl.cmdHook != nil {
 		hc := &CmdHookContext{
@@ -1052,6 +1053,7 @@ checkNMin:
 		if err == nil {
 			err = ErrInterrupt
 		}
+		*pictx = nil
 	default:
 	}
 	if !cmd.weakStatus {
