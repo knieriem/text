@@ -297,6 +297,7 @@ func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
 				cl.cur.isCompound = cplx
 				return nil
 			},
+			Help: "Invert the exit status of the following command.",
 		},
 		"_!": {
 			Hidden:      true,
@@ -343,7 +344,8 @@ func NewCmdInterp(s text.Scanner, m CmdMap, opts ...Option) (cl *CmdLine) {
 				return nil
 			},
 			Help: `Set a flag as in Plan 9's rc:
-	e	exit if a simple command (not part of an if-condition) fails`,
+	e	Exit if a simple command (not part of an if-condition) fails.
+	x	Print each simple command before executing it.`,
 		},
 		"fn": {
 			isCompound: true,
