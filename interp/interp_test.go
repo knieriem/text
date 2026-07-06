@@ -60,10 +60,20 @@ func TestInterp(t *testing.T) {
 
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
+			errOut := &stdout
+			errFmt := func(err error) string {
+				return "ERR: " + err.Error()
+			}
+			if expectedErr != "" {
+				errOut = &stderr
+				errFmt = func(err error) string {
+					return err.Error()
+				}
+			}
 
 			r := strings.NewReader(inputScript)
 			s := bufio.NewScanner(r)
-			cli := NewCmdInterp(s, nil, WithStdout(&stdout), WithStderr(&stderr))
+			cli := NewCmdInterp(s, nil, WithStdout(&stdout), WithStderr(errOut), WithErrFormatter(errFmt))
 
 			cli.Open = func(filename string) (io.ReadCloser, error) {
 				f, err := afs.Open(filename)
@@ -92,7 +102,7 @@ func TestInterp(t *testing.T) {
 			if expectedErr != "" {
 				gotErr := stderr.String()
 				if !strings.Contains(gotErr, strings.TrimSpace(expectedErr)) {
-					t.Errorf("stderr mismatch:\ngot:\n%s\nwant to contain:\n%s", gotErr, expectedErr)
+					t.Errorf("stderr mismatch:\ngot:\n%s\nwant:\n%s", gotErr, expectedErr)
 				}
 			}
 		})

@@ -95,6 +95,7 @@ type CmdLine struct {
 	Forward     io.Writer
 	printCmd    func(*rc.CmdLine)
 	handleError func(err error)
+	formatError func(err error) string
 	Open        func(filename string) (io.ReadCloser, error)
 	cmdHook     CmdHookFunc
 
@@ -130,6 +131,12 @@ func WithStdout(w io.Writer) Option {
 func WithStderr(w io.Writer) Option {
 	return func(cl *CmdLine) {
 		cl.errOut = w
+	}
+}
+
+func WithErrFormatter(f func(error) string) Option {
+	return func(cl *CmdLine) {
+		cl.formatError = f
 	}
 }
 
@@ -524,7 +531,13 @@ a single command, or a block enclosed in '{' and '}':
 		fmt.Fprintf(cl.Stdout, "%% %v\n", cmd)
 	}
 	cl.handleError = func(err error) {
-		fmt.Fprintln(cl.errOut, err)
+		s := ""
+		if cl.formatError != nil {
+			s = cl.formatError(err)
+		} else {
+			s = err.Error()
+		}
+		fmt.Fprintln(cl.errOut, s)
 	}
 	cl.cIntr = make(chan struct{})
 

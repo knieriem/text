@@ -19,8 +19,7 @@ echo completed2
 
 -- stdout --
 starting
+ERR: thisCommandDoesNotExist: no such command
 completed
 starting2
--- stderr --
-thisCommandDoesNotExist: no such command
-foo: no such command
+ERR: foo: no such command
