@@ -467,6 +467,13 @@ a single command, or a block enclosed in '{' and '}':
 			weakStatus: true,
 			Help:       "Exit the current loop.",
 		},
+		"continue": {
+			Fn: func(_ Context, _ []string) error {
+				return cl.continueLoop()
+			},
+			weakStatus: true,
+			Help:       "Exit the current loop.",
+		},
 		"false": {
 			Fn: func(_ Context, _ []string) error {
 				return errors.New("false")
@@ -689,6 +696,30 @@ func (cl *CmdLine) popStackAll() {
 }
 
 func (cl *CmdLine) breakLoop() error {
+	err := cl.findCurLoop()
+	if err != nil {
+		return err
+	}
+	cl.popStack()
+	return nil
+}
+
+func (cl *CmdLine) continueLoop() error {
+	err := cl.findCurLoop()
+	if err != nil {
+		return err
+	}
+	if !cl.cur.repetition.done() {
+		rc := cl.cur.rewind()
+		cl.cur.lineReader = newCmdLineReader(bufio.NewScanner(rc), rc)
+		cl.cmdLineReader = cl.cur.lineReader
+		return nil
+	}
+	cl.popStack()
+	return nil
+}
+
+func (cl *CmdLine) findCurLoop() error {
 	isLoop := cl.cur.isLoop()
 	for {
 		if len(cl.inputStack) == 0 || cl.cur.isFunc {
@@ -700,10 +731,10 @@ func (cl *CmdLine) breakLoop() error {
 			}
 			return nil
 		}
-		cl.popStack()
 		if isLoop {
 			return nil
 		}
+		cl.popStack()
 		isLoop = cl.cur.isLoop()
 	}
 }

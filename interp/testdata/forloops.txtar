@@ -84,6 +84,42 @@ for 200ms {
 	d=`{expr $d * 4}
 }
 
+echo ----
+
+for i in 1...4 {
+	if ~ $i 2 {
+		continue
+	}
+	echo L $i
+}
+
+echo ----
+
+# test break not within a loop
+break
+fn notaloop {
+	if ~ $1 1 {
+		break
+	}
+}
+notaloop 1
+echo ----
+
+# test continue not within a loop
+continue
+fn notaloop {
+	if ~ $1 1 {
+		continue
+	}
+}
+
+# the failing "continue" will result in a full stack unwrap,
+# i.e. the outer loop will break too
+for 10 {
+	notaloop 1
+}
+echo ----
+
 -- stdout --
 _3
 _4
@@ -127,3 +163,13 @@ foo
 bar
 50ms
 200ms
+----
+L 1
+L 3
+----
+ERR: break: not within a loop
+ERR: break: not within a loop
+----
+ERR: continue: not within a loop
+ERR: continue: not within a loop
+----
