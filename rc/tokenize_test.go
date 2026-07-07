@@ -221,6 +221,11 @@ var tokenizeCmdTests = []testSpec{
 			"baz",
 		},
 	}, {
+		input: "`{echo foo bar\u00a0baz}",
+		fields: []string{
+			"foo", "bar baz",
+		},
+	}, {
 		input:    "a=`{echo foo `{echo bar} baz",
 		mustFail: true,
 	}, {

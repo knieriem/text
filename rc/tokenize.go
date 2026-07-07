@@ -348,7 +348,9 @@ func (tok *tokenizer) expandEnv(t token) token {
 		if !tok.yield(&st, err) {
 			panic(yieldAborted{})
 		}
-		return &stringListToken{list: strings.Fields(r.Output)}
+		return &stringListToken{list: strings.FieldsFunc(r.Output, func(r rune) bool {
+			return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+		})}
 
 	case *varRefToken:
 		ref := x.String()[1:]
