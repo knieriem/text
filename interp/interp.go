@@ -991,7 +991,7 @@ func (cl *CmdLine) evalCmdLine(pictx **icontext, w text.Writer, c *rc.CmdLine) {
 		return
 	}
 	if name == "help" {
-		cl.help(cl.Stdout, args[1:])
+		cl.help(w, args[1:])
 		if cl.Forward != nil {
 			cl.fwd([]byte("help\n"))
 		}
