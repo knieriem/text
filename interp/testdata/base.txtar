@@ -35,6 +35,14 @@ expr 500ms / 2
 expr 5 / 2
 expr 5 / 2.5
 expr 5.5 / 2
+
+if test 3 -lt 4 {
+	echo true
+}
+if test 3 -lt 2 {
+	echo false
+}
+
 -- stdout --
 foo
 f: foo
@@ -57,4 +65,5 @@ c1
 2
 2
 2.75
+true
 -- stderr --
