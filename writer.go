@@ -6,7 +6,7 @@ import (
 
 type Writer interface {
 	io.Writer
-	Printf(format string, arg ...interface{}) (n int, err error)
-	Println(arg ...interface{}) (n int, err error)
+	Printf(format string, arg ...any) (n int, err error)
+	Println(arg ...any) (n int, err error)
 	PrintSlice([]string) (n int, err error)
 }

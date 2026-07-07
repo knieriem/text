@@ -1432,7 +1432,7 @@ retry:
 			}
 			fmt.Fprintln(w, "\t"+name+flags+argString(" ", v.Arg, "")+argString(" [", v.Opt, "]"))
 			if v.Help != "" {
-				for _, s := range strings.Split(v.Help, "\n") {
+				for s := range strings.SplitSeq(v.Help, "\n") {
 					fmt.Fprintln(w, "\t\t"+s)
 				}
 			}
@@ -1507,12 +1507,12 @@ func newBufWriter() (text.Writer, *bytes.Buffer) {
 	return w, b
 }
 
-func (w *writer) Printf(format string, arg ...interface{}) (n int, err error) {
+func (w *writer) Printf(format string, arg ...any) (n int, err error) {
 	s := fmt.Sprintf(format, arg...)
 	return w.print(s + "\n")
 }
 
-func (w *writer) Println(arg ...interface{}) (n int, err error) {
+func (w *writer) Println(arg ...any) (n int, err error) {
 	return w.print(fmt.Sprintln(arg...))
 }
 

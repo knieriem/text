@@ -54,15 +54,15 @@ type decoder struct {
 }
 
 type Deferred interface {
-	DeferredWork(arg interface{}) error
+	DeferredWork(arg any) error
 }
 
 type DeferredWorkRunner interface {
-	RunDeferredWork(func(arg interface{}) error) error
+	RunDeferredWork(func(arg any) error) error
 }
 
 type deferred struct {
-	fn    func(interface{}) error
+	fn    func(any) error
 	line  int
 	field string
 }
@@ -90,7 +90,7 @@ func (d *decoder) saveError(err error) {
 	d.errList.Add(e)
 }
 
-func (e Elem) Decode(i interface{}, c *Config) (err error) {
+func (e Elem) Decode(i any, c *Config) (err error) {
 	v := reflect.ValueOf(i)
 	if v.Kind() != reflect.Pointer {
 		err = errors.New("argument is not a pointer to an object")
@@ -207,10 +207,10 @@ func (d *decoder) decodeStruct(dest reflect.Value, src Elem) {
 		v := src.Value()
 		var pfx []Elem
 		for _, x := range rc.Tokenize(v) {
-			eq := strings.Index(x, "=")
+			before, after, ok0 := strings.Cut(x, "=")
 			el := Elem{LineNum: d.cur.line}
-			if eq != -1 {
-				el.Text = x[:eq] + d.Sep + "\t" + x[eq+1:]
+			if ok0 {
+				el.Text = before + d.Sep + "\t" + after
 			} else {
 				el.Text = x + d.Sep + "\ttrue"
 			}
@@ -281,8 +281,7 @@ func (d *decoder) decodeStruct(dest reflect.Value, src Elem) {
 				if t.Kind() == reflect.Pointer {
 					t = t.Elem()
 				}
-				var etu encoding.TextUnmarshaler
-				implTU := reflect.PtrTo(t).Implements(reflect.TypeOf(&etu).Elem())
+				implTU := reflect.PtrTo(t).Implements(reflect.TypeFor[encoding.TextUnmarshaler]())
 				if t.Kind() == reflect.Struct && !implTU {
 					combine = true
 				}
@@ -387,7 +386,7 @@ func (d *decoder) decodeItem(v reflect.Value, el Elem) {
 retry:
 	switch v.Kind() {
 	case reflect.Pointer:
-		if v.Type() == reflect.TypeOf(&el) {
+		if v.Type() == reflect.TypeFor[*Elem]() {
 			v.Set(reflect.ValueOf(&el))
 		} else {
 			vObj := reflect.New(v.Type().Elem())
@@ -454,7 +453,7 @@ func (d *decoder) decodeMap(v reflect.Value, src Elem) {
 	key := reflect.New(t.Key()).Elem()
 	val := reflect.New(t.Elem()).Elem()
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		el := src.Children[i]
 		d.cur.line = el.LineNum
 		if el.Text == "" {

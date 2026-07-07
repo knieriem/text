@@ -111,8 +111,8 @@ func TestInterp(t *testing.T) {
 
 func parseMetadata(comment []byte) map[string]string {
 	meta := make(map[string]string)
-	lines := strings.Split(string(comment), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(string(comment), "\n")
+	for line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

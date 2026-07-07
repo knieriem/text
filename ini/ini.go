@@ -81,7 +81,7 @@ func LookupFiles(dir, ext string) ([]File, error) {
 	return f, nil
 }
 
-func (f *File) Parse(conf interface{}) (err error) {
+func (f *File) Parse(conf any) (err error) {
 	var r io.ReadCloser
 
 	name := f.Name
@@ -126,7 +126,7 @@ func (f *File) Parse(conf interface{}) (err error) {
 
 // A DecodeFn parses, and decodes a configuration file and stores it
 // in the value pointed to by v.
-type DecodeFn func(v interface{}) error
+type DecodeFn func(v any) error
 
 // A WalkFn is called for each part that is found by WalkParts. It
 // should call decode to parse the part's contents into the provided
@@ -201,7 +201,7 @@ func parseDir(dirname, ext string, walkFn WalkFn, inf *fsAnnotations) error {
 }
 
 func parsePart(name string, walkFn WalkFn, inf *fsAnnotations) error {
-	err := walkFn(path.Base(name), func(data interface{}) error {
+	err := walkFn(path.Base(name), func(data any) error {
 		f, err := ns.Open(name)
 		if err != nil {
 			return err
@@ -217,7 +217,7 @@ func parsePart(name string, walkFn WalkFn, inf *fsAnnotations) error {
 // ParseFile parses a single configuration file that is found in the
 // configured namespace under the given name. A label referring to the
 // file system, where the file was found, is returned.
-func ParseFile(name string, conf interface{}) (fsLabel string, err error) {
+func ParseFile(name string, conf any) (fsLabel string, err error) {
 	f := NewFile(name, "", "")
 	err = f.Parse(conf)
 	return f.Label, err
@@ -225,7 +225,7 @@ func ParseFile(name string, conf interface{}) (fsLabel string, err error) {
 
 var MultiStringSep string
 
-func Parse(r io.Reader, conf interface{}) (err error) {
+func Parse(r io.Reader, conf any) (err error) {
 	el, err := readTiData(r)
 	if err != nil {
 		return
@@ -284,7 +284,7 @@ type fsAnnotations struct {
 	fsRoot string
 }
 
-func (a *fsAnnotations) from(item interface{}) bool {
+func (a *fsAnnotations) from(item any) bool {
 	it, ok := item.(fsutil.Item)
 	if !ok {
 		return false

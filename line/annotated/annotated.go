@@ -71,10 +71,7 @@ func (af *File) Chunks(nContext int) (chunks []Chunk) {
 		}
 	}
 	if iErrPrev != -1 {
-		end := iErrPrev + nContext + 1
-		if end > len(af.Lines) {
-			end = len(af.Lines)
-		}
+		end := min(iErrPrev+nContext+1, len(af.Lines))
 		chunks = append(chunks, Chunk{Start: af.Start + i0, Lines: af.Lines[i0:end]})
 	}
 	return
