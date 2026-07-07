@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"iter"
 	"os"
@@ -559,6 +560,16 @@ a single command, or a block enclosed in '{' and '}':
 	return cl
 }
 
+func (cl *CmdLine) openRedirFile(name string, flag int, perm os.FileMode) (RedirFile, error) {
+	if name == "/dev/null" {
+		return discardingFile{}, nil
+	}
+	if cl.OpenRedirFile != nil {
+		return cl.OpenRedirFile(name, flag, perm)
+	}
+	return nil, fs.ErrNotExist
+}
+
 type discardingFile struct{}
 
 func (discardingFile) Close() error                                 { return nil }
@@ -600,7 +611,7 @@ func (cl *CmdLine) redirect(op string, filename string) (text.Writer, error) {
 	default:
 		return nil, errors.New("redirection type not supported")
 	}
-	file, err = cl.OpenRedirFile(filename, owflags, 0644)
+	file, err = cl.openRedirFile(filename, owflags, 0644)
 	if err != nil {
 		return nil, err
 	}
